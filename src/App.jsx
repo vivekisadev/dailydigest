@@ -189,33 +189,38 @@ export default function App() {
     
     if (SCRIPT_URL) {
       setIsLoading(true);
-      fetch(SCRIPT_URL)
+      fetch(`${SCRIPT_URL}?t=${Date.now()}`)
         .then(res => res.json())
         .then(data => { 
           if (data && data.success && Array.isArray(data.tasks)) {
+            const allItems = [
+              ...RAW.map(r => ({ id: `${r[0]}-${r[1]}-${r[2]}`, week: r[0], day: r[1], name: r[3] })),
+              ...customTasks.map(t => ({ id: t.id, week: t.week, day: t.day, name: t.topic }))
+            ];
             const newDone = {};
             const newRowMap = {};
-            RAW.forEach(r => {
-               const id = `${r[0]}-${r[1]}-${r[2]}`;
-               const topic = r[3];
-               // Match based on Week + Day OR just Name (topic)
-               const match = data.tasks.find(t => Number(t.week) === r[0] && String(t.day).trim() === (DAYS[r[1]] || "") && String(t.name).trim() === topic)
-                          || data.tasks.find(t => Number(t.week) === r[0] && String(t.name).trim() === topic)
-                          || data.tasks.find(t => String(t.name).trim() === topic);
+            allItems.forEach(item => {
+               // Match based on Week + Day OR just Name
+               const match = data.tasks.find(t => Number(t.week) === item.week && 
+                                                String(t.day).trim() === (DAYS[item.day] || "") && 
+                                                String(t.name).trim() === item.name)
+                          || data.tasks.find(t => Number(t.week) === item.week && String(t.name).trim() === item.name)
+                          || data.tasks.find(t => String(t.name).trim() === item.name);
                
                if (match) {
-                 newRowMap[id] = { row: match.row, name: match.name };
-                 if (match.status === "Done") newDone[id] = true;
+                 newRowMap[item.id] = { row: match.row, name: match.name };
+                 if (match.status === "Done") newDone[item.id] = true;
                }
             });
+
             rowMapRef.current = newRowMap;
-            setDone(newDone);
+            setDone(prev => ({ ...prev, ...newDone }));
           }
           setIsLoading(false); 
         })
         .catch(err => { console.error("Sync Error:", err); setIsLoading(false); });
     }
-  }, []);
+  }, [customTasks.length]);
 
   const persist = useCallback(d => {
     try { localStorage.setItem("vtask_dark_v5", JSON.stringify(d)); } catch(e){}
