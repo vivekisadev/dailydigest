@@ -8,7 +8,8 @@ import BlurText from "./components/BlurText.jsx";
 import ShinyText from "./components/ShinyText.jsx";
 import SpotlightCard from "./components/SpotlightCard.jsx";
 
-const SCRIPT_URL = "https://script.google.com/macros/s/AKfycby8Lb7t-43U5tSj3XF9zP27yK4GWlxnZS47sIiCDXeysxwpEheGgVM7B128NP8Ay0Pq/exec";
+import { doc, getDoc, setDoc } from "firebase/firestore";
+import { db } from "./firebase";
 
 /* ═══ HELPERS ═══ */
 function haptic(s="light"){try{navigator.vibrate?.(s==="heavy"?30:s==="medium"?15:8)}catch(e){}}
@@ -116,11 +117,35 @@ const TopicCard = memo(({ task, track, isDone, isExpanded, onToggleExpand, onTog
                 <span>{track.sublabel}</span>
               </div>
               <div className="topic-detail-row">
-                <span className="topic-detail-label">Priority</span>
-                <span className="priority-badge" style={{ "--p-color": task.hrs >= 3 ? "#F87171" : "#FCD34D" }}>
-                  {task.hrs >= 3 ? "High" : "Medium"}
+                <span className="topic-detail-label">Difficulty</span>
+                <span className="priority-badge" style={{ "--p-color": task.diff === "Hard" ? "#F87171" : task.diff === "Medium" ? "#FCD34D" : "#6EE7B7" }}>
+                  {task.diff || "Medium"}
                 </span>
               </div>
+              <div className="topic-detail-row">
+                <span className="topic-detail-label">Priority</span>
+                <span className="priority-badge" style={{ "--p-color": task.pri === "High" || task.hrs >= 3 ? "#F87171" : "#FCD34D" }}>
+                  {task.pri || (task.hrs >= 3 ? "High" : "Medium")}
+                </span>
+              </div>
+              {task.probs && task.probs.length > 0 && (
+                <div className="topic-detail-row" style={{ flexDirection: "column", alignItems: "flex-start", gap: 6 }}>
+                  <span className="topic-detail-label" style={{ marginBottom: 0 }}>💻 Problems</span>
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 4 }}>
+                    {task.probs.map((p, i) => {
+                      const isUrl = p.startsWith("http");
+                      const href = isUrl ? p : `https://leetcode.com/problemset/all/?search=${encodeURIComponent(p.replace('LC ', ''))}`;
+                      return (
+                        <a key={i} href={href} target="_blank" rel="noopener noreferrer" style={{ textDecoration: "none" }} onClick={e => e.stopPropagation()}>
+                          <span className="chip interactable" style={{ cursor: "pointer", "--chip-color": track.color, "--chip-bg": track.bg, fontSize: 11, padding: "2px 8px" }}>
+                            {isUrl ? "Link 🔗" : p} ↗
+                          </span>
+                        </a>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
               {resources.length > 0 && (
                 <div className="topic-resources">
                   <div className="topic-detail-label" style={{ marginBottom: 8 }}>📎 Resources</div>
@@ -145,18 +170,159 @@ const TopicCard = memo(({ task, track, isDone, isExpanded, onToggleExpand, onTog
   );
 });
 
-/* ═══ MAIN APP ═══ */
+/* ═══ LOGIN SCREEN ═══ */
+function LoginScreen({ onLogin }) {
+  const [isSignUp, setIsSignUp] = useState(false);
+  const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [selectedTracks, setSelectedTracks] = useState([0, 1, 2, 3]); // Pick categories
+  const [error, setError] = useState("");
+
+    const handleAuth = async (e) => {
+    e.preventDefault();
+    if (username.trim().length < 3) {
+      setError("Username must be at least 3 characters.");
+      return;
+    }
+    
+    setError("Connecting to DB...");
+    const userKey = username.trim();
+    
+    let existsInDb = false;
+    const docRef = doc(db, "users", userKey);
+    try {
+      const snap = await getDoc(docRef);
+      existsInDb = snap.exists();
+    } catch (err) {
+      console.error(err);
+      setError("Failed to connect to Firebase. Check internet or API keys.");
+      return;
+    }
+
+    if (isSignUp) {
+      if (email.trim().length < 5 || !email.includes("@")) {
+        setError("Please enter a valid email address for notifications.");
+        return;
+      }
+      if (existsInDb) {
+        setError("Username already exists in the cloud. Please log in.");
+        return;
+      }
+      
+      // Save notification email, base progress & selected roadmap niches!
+      await setDoc(docRef, {
+        username: userKey,
+        email: email.trim(),
+        selectedTracks: selectedTracks.length > 0 ? selectedTracks : [0, 1, 2, 3], // fallback
+        startDate: new Date().toISOString(),
+        progress: {},
+        customTasks: [],
+        completedTaskNames: []
+      });
+    } else {
+      if (!existsInDb) {
+        setError("Account not found. Please click 'Create Account' below to start fresh!");
+        return;
+      }
+    }
+
+    onLogin(userKey);
+  };
+
+  return (
+    <div className="app-shell" style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+      <motion.div className="detail-page" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} style={{ position: "relative", inset: "auto", background: "var(--card)", padding: 40, borderRadius: 20, maxWidth: 400, width: "100%", boxShadow: "0 10px 40px rgba(0,0,0,0.5)" }}>
+        <div style={{ textAlign: "center", marginBottom: 30 }}>
+          <div className="avatar" style={{ margin: "0 auto 16px", width: 56, height: 56, background: "rgba(167,139,250,0.15)", color: "#A78BFA", fontSize: 24 }}>{isSignUp ? "✨" : "🗝️"}</div>
+          <h1 className="hero-title" style={{ fontSize: 24, marginBottom: 8 }}>{isSignUp ? "Start Your Journey" : "Welcome Back"}</h1>
+          <p className="hero-subtitle" style={{ fontSize: 13, lineHeight: 1.5 }}>
+            {isSignUp ? "Create a local profile to begin tracking your 90-Day FAANG progress independently." : "Sign in to safely securely access your progress saved on this device."}
+          </p>
+        </div>
+        <form onSubmit={handleAuth} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          <div className="form-group">
+            <label style={{ fontSize: 13, color: "var(--sub)" }}>Username</label>
+            <input className="input-field" placeholder="Enter your username..." value={username} onChange={e => { setUsername(e.target.value); setError(""); }} required />
+          </div>
+          <AnimatePresence>
+            {isSignUp && (
+              <motion.div className="form-group" initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} style={{ overflow: "hidden" }}>
+                <label style={{ fontSize: 13, color: "var(--sub)" }}>Email Address (For Task Alerts)</label>
+                <input className="input-field" type="email" placeholder="your@email.com" value={email} onChange={e => { setEmail(e.target.value); setError(""); }} required={isSignUp} />
+                
+                <label style={{ fontSize: 13, color: "var(--sub)", marginTop: 12, display: "block" }}>Select Roadmaps (Focus Mode)</label>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 6 }}>
+                  {TRACKS.map(t => (
+                    <div key={t.id} className="interactable" onClick={() => {
+                      if (selectedTracks.includes(t.id)) setSelectedTracks(selectedTracks.filter(x => x !== t.id));
+                      else setSelectedTracks([...selectedTracks, t.id]);
+                    }} style={{ padding: "8px 14px", borderRadius: 8, fontSize: 13, border: "1px solid " + t.color, background: selectedTracks.includes(t.id) ? t.color : "transparent", color: selectedTracks.includes(t.id) ? "#0A0A0F" : t.color, fontWeight: 600, cursor: "pointer", transition: "all 0.2s" }}>
+                      {t.label} {selectedTracks.includes(t.id) ? "✓" : "+"}
+                    </div>
+                  ))}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+          <div className="form-group">
+            <label style={{ fontSize: 13, color: "var(--sub)" }}>Password (Optional)</label>
+            <input className="input-field" type="password" placeholder="••••••••" value={password} onChange={e => { setPassword(e.target.value); setError(""); }} />
+          </div>
+          {error && <div style={{ color: "#F87171", fontSize: 13, textAlign: "center", marginTop: -4 }}>{error}</div>}
+          <button type="submit" className="create-btn interactable" style={{ marginTop: 10, padding: 16, fontSize: 15, fontWeight: 600 }}>
+            {isSignUp ? "Create Account &rarr;" : "Log In to Roadmap &rarr;"}
+          </button>
+        </form>
+        
+        <div style={{ marginTop: 24, textAlign: "center", fontSize: 13, color: "var(--sub)" }}>
+          {isSignUp ? "Already have an account? " : "New to the roadmap? "}
+          <span className="interactable" style={{ color: "#A78BFA", cursor: "pointer", fontWeight: 600 }} onClick={() => { setIsSignUp(!isSignUp); setError(""); setUsername(""); setPassword("") }}>
+            {isSignUp ? "Log in" : "Create Account"}
+          </span>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
+/* ═══ ROADMAP APP WRAPPER ═══ */
 export default function App() {
+  const [user, setUser] = useState(() => {
+    try { return localStorage.getItem("vtask_logged_in_user") || null; } catch(e) { return null; }
+  });
+
+  if (!user) {
+    return <LoginScreen onLogin={(u) => {
+      localStorage.setItem("vtask_logged_in_user", u);
+      setUser(u);
+    }} />;
+  }
+  return <MainApp user={user} onLogout={() => {
+    localStorage.removeItem("vtask_logged_in_user");
+    setUser(null);
+  }} />;
+}
+
+/* ═══ MAIN APP ═══ */
+function MainApp({ user, onLogout }) {
+  const [isDbLoaded, setIsDbLoaded] = useState(false);
   const now = new Date();
   const rawDay = now.getDay();
-  const todayIdx = rawDay === 0 ? 5 : rawDay - 1;
-  const clampedToday = Math.min(todayIdx, 5);
+  const [startDate, setStartDate] = useState(new Date().toISOString());
+  const [assignedTracks, setAssignedTracks] = useState([0, 1, 2, 3]); // Loaded from Cloud
+
+  const getDayOffset = Math.floor((now - new Date(startDate)) / (1000 * 60 * 60 * 24));
+  const currentWeekIdx = Math.floor(getDayOffset / 7) + 1;
+  const currentDayIdx = getDayOffset % 7;
+  const clampedToday = currentDayIdx;
+
   const hr = now.getHours();
   // We'll wrap this greeting in ShinyText
   const greeting = hr < 12 ? "Good morning" : hr < 17 ? "Good afternoon" : "Good evening";
 
-  const [week, setWeek] = useState(1);
-  const [selDay, setSelDay] = useState(clampedToday);
+  const [week, setWeek] = useState(Math.min(15, Math.max(1, currentWeekIdx)));
+  const [selDay, setSelDay] = useState(Math.min(6, Math.max(0, currentDayIdx)));
   const [done, setDone] = useState({});
   const [tab, setTab] = useState("home");
   const [toast, setToast] = useState(null);
@@ -170,67 +336,59 @@ export default function App() {
   const [monthOffset, setMonthOffset] = useState(0);
   const [notifsEnabled, setNotifsEnabled] = useState(false);
   const [alertEmail, setAlertEmail] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
   const scrollRef = useRef(null);
-  const rowMapRef = useRef({});
 
   useEffect(() => {
-    try {
-      const savedEmail = localStorage.getItem("vtask_email");
-      if (savedEmail) setAlertEmail(savedEmail);
-      if (Notification.permission === "granted") setNotifsEnabled(true);
-      
-      const saved = localStorage.getItem("vtask_dark_v5");
-      if (saved) setDone(JSON.parse(saved));
-      
-      const savedCustom = localStorage.getItem("vtask_custom");
-      if (savedCustom) setCustomTasks(JSON.parse(savedCustom));
-    } catch (e) {}
-    
-    if (SCRIPT_URL) {
-      setIsLoading(true);
-      fetch(`${SCRIPT_URL}?t=${Date.now()}`)
-        .then(res => res.json())
-        .then(data => { 
-          if (data && data.success && Array.isArray(data.tasks)) {
-            const allItems = [
-              ...RAW.map(r => ({ id: `${r[0]}-${r[1]}-${r[2]}`, week: r[0], day: r[1], name: r[3] })),
-              ...customTasks.map(t => ({ id: t.id, week: t.week, day: t.day, name: t.topic }))
-            ];
-            const newDone = {};
-            const newRowMap = {};
-            allItems.forEach(item => {
-               // Match based on Week + Day OR just Name
-               const match = data.tasks.find(t => Number(t.week) === item.week && 
-                                                String(t.day).trim() === (DAYS[item.day] || "") && 
-                                                String(t.name).trim() === item.name)
-                          || data.tasks.find(t => Number(t.week) === item.week && String(t.name).trim() === item.name)
-                          || data.tasks.find(t => String(t.name).trim() === item.name);
-               
-               if (match) {
-                 newRowMap[item.id] = { row: match.row, name: match.name };
-                 if (match.status === "Done") newDone[item.id] = true;
-               }
-            });
-
-            rowMapRef.current = newRowMap;
-            setDone(prev => ({ ...prev, ...newDone }));
-          }
-          setIsLoading(false); 
-        })
-        .catch(err => { console.error("Sync Error:", err); setIsLoading(false); });
+    async function loadData() {
+      if (!user) return;
+      try {
+        const docRef = doc(db, "users", user);
+        const snap = await getDoc(docRef);
+        if (snap.exists()) {
+          const data = snap.data();
+          if (data.startDate) setStartDate(data.startDate);
+          if (data.progress) setDone(data.progress);
+          if (data.customTasks) setCustomTasks(data.customTasks);
+          if (data.email) setAlertEmail(data.email);
+          if (data.selectedTracks) setAssignedTracks([...data.selectedTracks, 4]); // Always show track 4 (Mocks)
+        } else {
+          // Sync unexpected missing rows immediately
+          await setDoc(docRef, { startDate: new Date().toISOString(), progress: {}, customTasks: [] }, { merge: true });
+        }
+        setIsDbLoaded(true);
+      } catch (err) {
+        console.error("Firebase error", err);
+      }
     }
-  }, [customTasks.length]);
+    loadData();
+    if (Notification.permission === "granted") setNotifsEnabled(true);
+  }, [user]);
 
-  const persist = useCallback(d => {
-    try { localStorage.setItem("vtask_dark_v5", JSON.stringify(d)); } catch(e){}
-  }, []);
+  const persist = useCallback(async d => {
+    try {
+      const completedTaskNames = [];
+      Object.keys(d).forEach(id => {
+        if (d[id]) {
+          if (id.startsWith("custom-")) {
+            const ct = customTasks.find(t => t.id === id);
+            if (ct) completedTaskNames.push(ct.topic);
+          } else {
+            const parts = id.split("-");
+            const r = RAW.find(t => t[0] == parts[0] && t[1] == parts[1] && t[2] == parts[2]);
+            if (r) completedTaskNames.push(r[3]);
+          }
+        }
+      });
+      await setDoc(doc(db, "users", user), { progress: d, completedTaskNames }, { merge: true });
+    } catch(e){}
+  }, [user, customTasks]);
 
   const todayTasks = useMemo(() => {
     const roadmap = PLAN[week]?.[selDay] || [];
     const custom = customTasks.filter(t => t.week === week && t.day === selDay);
-    return [...roadmap, ...custom];
-  }, [week, selDay, customTasks]);
+    const filteredRoadmap = roadmap.filter(t => assignedTracks.includes(t.track));
+    return [...filteredRoadmap, ...custom];
+  }, [week, selDay, customTasks, assignedTracks]);
 
   const upcomingTasks = useMemo(() => {
     const all = [];
@@ -240,7 +398,7 @@ export default function App() {
     // Add roadmap tasks from tomorrow onwards in current week
     for (let d = selDay + 1; d < 6; d++) {
       if (PLAN[currWeek]?.[d]) {
-        PLAN[currWeek][d].forEach(t => all.push({ ...t, dayLabel: DAYS[d], week: currWeek }));
+        PLAN[currWeek][d].filter(t => assignedTracks.includes(t.track)).forEach(t => all.push({ ...t, dayLabel: DAYS[d], week: currWeek }));
       }
     }
     // Add custom tasks
@@ -266,55 +424,9 @@ export default function App() {
       if (isDone) n[id] = true;
       else delete n[id];
       persist(n);
-      
-      if (SCRIPT_URL) {
-        let pTask = null;
-        if (id.startsWith("custom-")) {
-          pTask = customTasks.find(t => t.id === id);
-        } else {
-          const r = RAW.find(t => `${t[0]}-${t[1]}-${t[2]}` === id);
-          if (r) pTask = { week: r[0], day: r[1], track: r[2], topic: r[3], sub: r[4], hrs: r[5] };
-        }
-
-        if (!pTask) return n;
-
-        const trackDef = TRACKS[pTask.track];
-        const priority = pTask.hrs >= 3 ? "High" : "Medium";
-        const due = new Date();
-        let dueHour = 20;
-        if (trackDef && trackDef.sublabel.includes("AM")) dueHour = 8;
-        else if (trackDef && trackDef.sublabel.includes("10:00 PM")) dueHour = 22;
-        due.setHours(dueHour, 0, 0, 0);
-        if (due.getTime() < Date.now() && !isDone) due.setDate(due.getDate() + 1);
-
-        const mapped = rowMapRef.current[id];
-        const payload = {
-          taskName: mapped ? mapped.name : pTask.topic,
-          status: isDone ? "Done" : "Pending",
-          priority,
-          description: pTask.sub,
-          dueDate: due.toISOString(),
-          week: pTask.week,
-          day: DAYS[pTask.day] || "",
-          category: trackDef ? trackDef.label : "DSA",
-          subtopic: pTask.sub
-        };
-        
-        if (mapped) {
-          payload.row = mapped.row;
-        }
-
-        console.info(`Syncing "${payload.taskName}"...`, payload);
-        fetch(SCRIPT_URL, {
-          method: "POST",
-          body: JSON.stringify(payload)
-        })
-        .then(() => console.info(`"${payload.taskName}" synced successfully.`))
-        .catch(err => console.error(`Sync failed for "${pTask.topic}":`, err));
-      }
       return n;
     });
-  }, [persist, customTasks]);
+  }, [persist]);
 
   const showToast = msg => { setToast(msg); setTimeout(() => setToast(null), 2800); };
 
@@ -326,9 +438,38 @@ export default function App() {
     if (p === "granted") {
       setNotifsEnabled(true);
       showToast("🔔 Reminders enabled!");
-      new Notification("StudyTrack", { body: "You'll get reminders every 4 hours and before deadlines!" });
+      new Notification("StudyTrack", { body: "You'll get reminders based on task timings!" });
     } else showToast("Please allow notifications in settings");
   };
+
+  useEffect(() => {
+    if (!notifsEnabled) return;
+    const interval = setInterval(() => {
+      const currentHr = new Date().getHours();
+      // Only notify right on the hour
+      if (new Date().getMinutes() !== 0) return;
+      
+      const lastNotifKey = `notif_seen_${currentHr}_${new Date().toDateString()}_${user}`;
+      if (localStorage.getItem(lastNotifKey)) return;
+      
+      let targetTrackId = null;
+      if (currentHr === 10) targetTrackId = 0; // DSA
+      else if (currentHr === 14) targetTrackId = 1; // System Design or Mock
+      else if (currentHr === 18) targetTrackId = 2; // CS Fund
+      else if (currentHr === 20) targetTrackId = 3; // Behavioral
+      
+      if (targetTrackId !== null) {
+        // Find if we have a pending task today matching this track approx
+        const tTask = todayTasks.find(t => (t.track === targetTrackId || (t.track > targetTrackId)) && !done[t.id]);
+        if (tTask) {
+          const trackDef = TRACKS[tTask.track] || TRACKS[0];
+          new Notification("Time to focus!", { body: `Ready for ${tTask.topic}? Hop in and crush your ${trackDef.label} task!` });
+          localStorage.setItem(lastNotifKey, "true");
+        }
+      }
+    }, 60000); // Check every minute
+    return () => clearInterval(interval);
+  }, [notifsEnabled, todayTasks, done]);
 
   const todayDone = useMemo(() => todayTasks.filter(t => done[t.id]).length, [todayTasks, done]);
   const wkAll = useMemo(() => DAYS.flatMap((_, d) => PLAN[week]?.[d] || []), [week]);
@@ -353,6 +494,10 @@ export default function App() {
     { id: "notif", label: "Alerts", path: "M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" },
     { id: "profile", label: "Profile", path: "M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" },
   ];
+
+  if (!isDbLoaded) {
+    return <div className="app-shell" style={{ display: "flex", alignItems: "center", justifyContent: "center", color: "var(--sub)", fontSize: 13 }}>Syncing with Firebase Cloud...</div>;
+  }
 
   return (
     <div className="app-shell" ref={scrollRef}>
@@ -390,7 +535,7 @@ export default function App() {
                 <div style={{ fontSize: 12, color: "var(--sub)", marginTop: 8, textAlign: "right" }}>{trackPct}% complete</div>
               </motion.div>
 
-              {Array.from({ length: 10 }, (_, i) => {
+              {Array.from({ length: 15 }, (_, i) => {
                 const w = i + 1;
                 const weekTasks = DAYS.map((_, d) => (PLAN[w]?.[d] || []).find(t => t.track === roadmapTrack)).filter(Boolean);
                 const weekDone = weekTasks.filter(t => done[t.id]).length;
@@ -437,17 +582,17 @@ export default function App() {
             <div className="page-header">
               <div>
                 <motion.p className="greeting-sub" initial={{ opacity:0 }} animate={{ opacity:1 }} transition={{ delay:0.1 }}>
-                  <ShinyText text={`${greeting} Vivek 👋`} speed={3} />
+                  <ShinyText text={`${greeting} ${user} 👋`} speed={3} />
                 </motion.p>
                 <div className="greeting-main">
                   <BlurText text="Manage Your Daily Tasks" delay={50} className="greeting-blur" />
                 </div>
               </div>
-              <button className="week-badge interactable">Week {week}/10</button>
+              <button className="week-badge interactable">Week {week}/15</button>
             </div>
 
             <div className="week-scroll">
-              {Array.from({ length: 10 }, (_, i) => {
+              {Array.from({ length: 15 }, (_, i) => {
                 const w = i + 1, sel = w === week;
                 return (
                   <button key={w} className={`week-pill interactable${sel ? " active" : ""}`}
@@ -526,7 +671,7 @@ export default function App() {
                 <div className="overall-pct"><ShinyText text={`${Math.round(totalPct * 100)}%`} speed={4} /></div>
                 <div className="overall-info">
                   <div className="pbar" style={{ height: 6 }}><div className="pfill accent-gradient" style={{ width: `${totalPct*100}%` }} /></div>
-                  <span className="overall-sub">{totalDone} of {totalAll} tasks · Week {week}/10</span>
+                  <span className="overall-sub">{totalDone} of {totalAll} tasks · Week {week}/15</span>
                 </div>
               </div>
             </div>
@@ -551,12 +696,16 @@ export default function App() {
               {monthOffset === 0 && <>
                 <div className="day-labels">{DAYS.map(d => <span key={d} className="day-label">{d}</span>)}</div>
                 <div className="date-pills">
-                  {DAYS.map((d, i) => (
-                    <button key={d} onClick={() => { haptic(); setSelDay(i); }}
-                      className={`date-pill interactable${i === selDay ? " active" : ""}${i === clampedToday && i !== selDay ? " today" : ""}`}>
-                      {now.getDate() - clampedToday + i}
-                    </button>
-                  ))}
+                  {DAYS.map((d, i) => {
+                    const pillDate = new Date(startDate);
+                    pillDate.setDate(pillDate.getDate() + (week - 1) * 7 + i);
+                    return (
+                      <button key={d} onClick={() => { haptic(); setSelDay(i); }}
+                        className={`date-pill interactable${i === selDay ? " active" : ""}${i === clampedToday && week === currentWeekIdx && i !== selDay ? " today" : ""}`}>
+                        {pillDate.getDate()}
+                      </button>
+                    )
+                  })}
                 </div>
               </>}
             </div>
@@ -566,7 +715,7 @@ export default function App() {
             {/* Week selector for non-current months */}
             {monthOffset !== 0 && (
               <div className="week-scroll" style={{ marginBottom: 16 }}>
-                {Array.from({ length: 10 }, (_, i) => {
+                {Array.from({ length: 15 }, (_, i) => {
                   const w = i + 1;
                   return <button key={w} className={`week-pill interactable${w === week ? " active" : ""}`} onClick={() => { haptic(); setWeek(w); }}>W{w}</button>;
                 })}
@@ -586,7 +735,11 @@ export default function App() {
                     <div className="timeline-header">
                       <div className={`timeline-dot${isSelected ? " active" : ""}`} />
                       <span className="timeline-day">{dayName}</span>
-                      <div className="timeline-date">{now.getDate() - clampedToday + dayIdx}</div>
+                      <div className="timeline-date">{(() => { 
+                        const d = new Date(startDate); 
+                        d.setDate(d.getDate() + (week - 1) * 7 + dayIdx);
+                        return `${d.getDate()} ${MONTHS[d.getMonth()].substring(0,3)}`;
+                      })()}</div>
                       <span style={{ fontSize: 12, color: "var(--sub)", marginLeft: "auto" }}>{dayDone}/{dayTasks.length}</span>
                     </div>
                     {dayTasks.map((task, idx) => {
@@ -672,9 +825,9 @@ export default function App() {
           <motion.div className="page" key="profile" {...fadeUp}>
             <div className="page-header"><h1 style={{ fontSize: 22 }}>Profile</h1></div>
             <motion.div className="profile-hero" {...scaleIn}>
-              <div className="profile-avatar">V</div>
-              <div className="profile-name">Vivek</div>
-              <div className="profile-role">Full Stack Developer in Training</div>
+              <div className="profile-avatar" style={{ textTransform: "uppercase" }}>{user[0] || "U"}</div>
+              <div className="profile-name">{user}</div>
+              <div className="profile-role">FAANG Candidate</div>
             </motion.div>
             <h3 className="section-title">Statistics</h3>
             <div className="stats-grid">
@@ -692,12 +845,15 @@ export default function App() {
                 <input type="email" placeholder="Email for alerts..." value={alertEmail} 
                   onChange={e => {
                     setAlertEmail(e.target.value);
-                    localStorage.setItem("vtask_email", e.target.value);
+                    setDoc(doc(db, "users", user), { email: e.target.value }, { merge: true });
                   }}
                   style={{ background: "transparent", border: "none", color: "var(--text)", width: "100%", outline: "none", fontSize: 15 }} />
               </div>
             </div>
-            {[{ label:"All Tasks",icon:"📋",action:()=>switchTab("calendar") },{ label:"Reset Progress",icon:"🔄",action:()=>{setDone({});persist({});showToast("Progress reset");} }]
+            {[{ label:"All Tasks",icon:"📋",action:()=>switchTab("calendar") },
+              { label:"Reset Progress",icon:"🔄",action:()=>{setDone({});persist({});showToast("Progress reset");} },
+              { label:"Log Out",icon:"🚪",action:onLogout }
+            ]
               .map(item => (
                 <div key={item.label} className="menu-item interactable" onClick={() => { haptic(); item.action?.(); }}>
                   <div className="menu-left"><span className="menu-icon">{item.icon}</span><span>{item.label}</span></div><span className="menu-arrow">›</span>
@@ -713,6 +869,37 @@ export default function App() {
         {detailTask && (() => {
           const tr = TRACKS[detailTask.track], isDone = !!done[detailTask.id];
           const resources = RESOURCES[detailTask.topic] || [];
+          
+          const getYoutubeId = (url) => {
+            const match = url?.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/);
+            return match ? match[1] : null;
+          };
+
+          const renderDescWithLinks = (text) => {
+            if (!text) return "";
+            const urlRegex = /(https?:\/\/[^\s]+)/g;
+            return text.split(urlRegex).map((part, i) => {
+              if (part.match(urlRegex)) {
+                const ytid = getYoutubeId(part);
+                if (ytid) {
+                  return (
+                    <a key={i} href={part} target="_blank" rel="noopener noreferrer" style={{ display: "block", marginTop: 8, marginBottom: 8, position: "relative", borderRadius: 12, overflow: "hidden", border: `1px solid ${tr.color}` }}>
+                      <img src={`https://img.youtube.com/vi/${ytid}/hqdefault.jpg`} style={{ width: "100%", height: 180, objectFit: "cover", opacity: 0.8 }} alt="Video Preview" />
+                      <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                        <div style={{ background: "rgba(220,38,38,0.9)", width: 48, height: 32, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                          <svg width="24" height="24" viewBox="0 0 24 24" fill="white"><path d="M8 5v14l11-7z"/></svg>
+                        </div>
+                      </div>
+                      <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, background: "linear-gradient(transparent, rgba(0,0,0,0.9))", padding: "10px 14px", color: "#fff", fontSize: 13, fontWeight: "500" }}>Watch Video</div>
+                    </a>
+                  );
+                }
+                return <a key={i} href={part} target="_blank" rel="noopener noreferrer" style={{ color: tr.color, textDecoration: "underline" }}>{part}</a>;
+              }
+              return <span key={i}>{part}</span>;
+            });
+          };
+
           return (
             <motion.div className="detail-overlay" key="detail" initial={{ opacity:0 }} animate={{ opacity:1 }} exit={{ opacity:0 }}>
               <motion.div className="detail-page" {...slideRight}>
@@ -729,22 +916,68 @@ export default function App() {
                   <div className="detail-meta-grid">
                     <div className="detail-meta"><span className="meta-label">Track</span><span className="meta-value" style={{ color:tr.color }}>{tr.label}</span></div>
                     <div className="detail-meta"><span className="meta-label">Duration</span><span className="meta-value">{detailTask.hrs}h</span></div>
+                    <div className="detail-meta"><span className="meta-label">Difficulty</span><span className="priority-badge" style={{ "--p-color":detailTask.diff==="Hard"?"#F87171":detailTask.diff==="Medium"?"#FCD34D":"#6EE7B7",marginTop:4 }}>{detailTask.diff||"Medium"}</span></div>
                     <div className="detail-meta"><span className="meta-label">Time</span><span className="meta-value">{tr.sublabel}</span></div>
-                    <div className="detail-meta"><span className="meta-label">Priority</span><span className="priority-badge" style={{ "--p-color":detailTask.hrs>=3?"#F87171":"#FCD34D",marginTop:4 }}>{detailTask.hrs>=3?"High":"Medium"}</span></div>
+                    <div className="detail-meta"><span className="meta-label">Priority</span><span className="priority-badge" style={{ "--p-color":(detailTask.pri==="High"||detailTask.hrs>=3)?"#F87171":"#FCD34D",marginTop:4 }}>{detailTask.pri||(detailTask.hrs>=3?"High":"Medium")}</span></div>
                   </div>
                 </motion.div>
                 <div className="detail-section"><h3 className="section-title">Description</h3>
-                  <div className="detail-desc-card">Focus on <strong>{detailTask.sub}</strong> in the {tr.label} track. {detailTask.hrs}-hour deep work session. 💪</div>
+                  <div className="detail-desc-card" style={{ lineHeight: 1.5 }}>
+                    {typeof detailTask.desc === 'string' && detailTask.desc.includes('<div') ? (
+                       <div dangerouslySetInnerHTML={{ __html: detailTask.desc }} />
+                    ) : (
+                       renderDescWithLinks(detailTask.desc || `Focus on ${detailTask.sub} in the ${tr.label} track. ${detailTask.hrs}-hour deep work session. 💪`)
+                    )}
+                  </div>
                 </div>
+                {detailTask.probs && detailTask.probs.length > 0 && (
+                  <div className="detail-section"><h3 className="section-title">💻 Problems to Solve</h3>
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
+                      {detailTask.probs.map((p, i) => {
+                        const isUrl = p.startsWith("http");
+                        const href = isUrl ? p : `https://leetcode.com/problemset/all/?search=${encodeURIComponent(p.replace('LC ', ''))}`;
+                        return (
+                          <a key={i} href={href} target="_blank" rel="noopener noreferrer" style={{ textDecoration: "none" }}>
+                            <span className="chip interactable" style={{ cursor: "pointer", "--chip-color": tr.color, "--chip-bg": tr.bg, fontSize: 13, padding: "6px 14px" }}>
+                              {isUrl ? "Link 🔗" : p} ↗
+                            </span>
+                          </a>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
                 {resources.length > 0 && (
                   <div className="detail-section"><h3 className="section-title">📎 Resources</h3>
-                    {resources.map((url, i) => {
-                      const domain = new URL(url).hostname.replace("www.","");
-                      return <a key={i} href={url} target="_blank" rel="noopener noreferrer" className="resource-link interactable">
-                        <span className="resource-icon">{domain.includes("youtube")?"🎬":domain.includes("leetcode")?"💡":domain.includes("github")?"🐙":"🔗"}</span>
-                        <span className="resource-domain">{domain}</span><span className="resource-arrow">↗</span>
-                      </a>;
-                    })}
+                    <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 8 }}>
+                      {resources.map((url, i) => {
+                        let domain = "";
+                        try { domain = new URL(url).hostname.replace("www.",""); } catch(e){}
+                        const ytid = getYoutubeId(url);
+
+                        if (ytid) {
+                          return (
+                            <a key={i} href={url} target="_blank" rel="noopener noreferrer" className="video-preview-card interactable" style={{ position: "relative", display: "block", borderRadius: 12, overflow: "hidden", background: "#000", border: `1px solid ${tr.color}` }}>
+                              <img src={`https://img.youtube.com/vi/${ytid}/hqdefault.jpg`} style={{ width: "100%", height: 180, objectFit: "cover", opacity: 0.8 }} alt="Video Preview" />
+                              <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                                <div style={{ background: "rgba(220,38,38,0.9)", width: 48, height: 32, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                                  <svg width="24" height="24" viewBox="0 0 24 24" fill="white"><path d="M8 5v14l11-7z"/></svg>
+                                </div>
+                              </div>
+                              <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, background: "linear-gradient(transparent, rgba(0,0,0,0.9))", padding: "10px 14px", color: "#fff", fontSize: 13, fontWeight: "500" }}>Watch Video</div>
+                            </a>
+                          );
+                        }
+
+                        return (
+                          <a key={i} href={url} target="_blank" rel="noopener noreferrer" className="resource-link interactable" style={{ display: "flex", alignItems: "center", padding: "12px 16px", background: "var(--card2)", borderRadius: 10, textDecoration: "none", border: "1px solid var(--border)" }}>
+                            <span className="resource-icon" style={{ fontSize: 20, marginRight: 12 }}>{domain.includes("leetcode")?"💡":domain.includes("github")?"🐙":"🔗"}</span>
+                            <span className="resource-domain" style={{ color: "var(--text)", flex: 1, fontWeight: 500 }}>{domain || url}</span>
+                            <span className="resource-arrow" style={{ color: "var(--sub)" }}>↗</span>
+                          </a>
+                        );
+                      })}
+                    </div>
                   </div>
                 )}
               </motion.div>
@@ -765,7 +998,7 @@ export default function App() {
               <div className="modal-row" style={{ display:'flex', gap:10 }}>
                 <div className="form-group" style={{ flex:1 }}><label>Week</label>
                   <select className="input-field" value={newTask.week} onChange={e => setNewTask({ ...newTask, week: parseInt(e.target.value) })}>
-                    {[...Array(10)].map((_, i) => <option key={i+1} value={i+1}>Week {i+1}</option>)}
+                    {[...Array(15)].map((_, i) => <option key={i+1} value={i+1}>Week {i+1}</option>)}
                   </select>
                 </div>
                 <div className="form-group" style={{ flex:1 }}><label>Day</label>
@@ -801,37 +1034,16 @@ export default function App() {
                   track: newTask.track, 
                   topic: newTask.name, 
                   sub: newTask.desc || "Custom Task", 
-                  hrs: newTask.priority === "High" ? 4 : 2 
+                  hrs: newTask.priority === "High" ? 4 : 2,
+                  pri: newTask.priority,
+                  diff: "Medium",
+                  desc: newTask.desc || "Manually added task.",
+                  probs: [], res: []
                 };
                 
                 const updatedCustom = [...customTasks, taskObj];
                 setCustomTasks(updatedCustom);
-                localStorage.setItem("vtask_custom", JSON.stringify(updatedCustom));
-                
-                // Sync to Google Sheet
-                if (SCRIPT_URL) {
-                  const due = new Date();
-                  const trackDef = TRACKS[newTask.track];
-                  let dueHour = 20;
-                  if (trackDef && trackDef.sublabel.includes("AM")) dueHour = 8;
-                  else if (trackDef && trackDef.sublabel.includes("10:00 PM")) dueHour = 22;
-                  due.setHours(dueHour, 0, 0, 0);
-
-                  const payload = {
-                    taskName: newTask.name,
-                    status: "Pending",
-                    priority: newTask.priority,
-                    description: newTask.desc || "Manual Add",
-                    dueDate: due.toISOString(),
-                    week: newTask.week,
-                    day: DAYS[newTask.day] || "",
-                    category: trackDef ? trackDef.label : "DSA",
-                    subtopic: newTask.desc || ""
-                  };
-                  fetch(SCRIPT_URL, { method: "POST", body: JSON.stringify(payload) })
-                    .then(() => console.info("Custom task synced to sheet."))
-                    .catch(console.error);
-                }
+                setDoc(doc(db, "users", user), { customTasks: updatedCustom }, { merge: true });
 
                 showToast("Task created & synced! ✨"); 
                 setShowCreate(false); 
