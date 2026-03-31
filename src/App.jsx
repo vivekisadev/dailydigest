@@ -472,10 +472,11 @@ function MainApp({ user, onLogout }) {
   }, [notifsEnabled, todayTasks, done]);
 
   const todayDone = useMemo(() => todayTasks.filter(t => done[t.id]).length, [todayTasks, done]);
-  const wkAll = useMemo(() => DAYS.flatMap((_, d) => PLAN[week]?.[d] || []), [week]);
+  const wkAll = useMemo(() => DAYS.flatMap((_, d) => (PLAN[week]?.[d] || []).filter(t => assignedTracks.includes(t.track))), [week, assignedTracks]);
   const wkDone = useMemo(() => wkAll.filter(t => done[t.id]).length, [wkAll, done]);
-  const totalAll = RAW.length;
-  const totalDone = useMemo(() => Object.keys(done).filter(k => done[k]).length, [done]);
+  const filteredRAW = useMemo(() => RAW.filter(r => assignedTracks.includes(r[2])), [assignedTracks]);
+  const totalAll = filteredRAW.length;
+  const totalDone = useMemo(() => filteredRAW.filter(r => done[`${r[0]}-${r[1]}-${r[2]}`]).length, [filteredRAW, done]);
   const totalPct = totalAll ? totalDone / totalAll : 0;
 
   // Month navigation
@@ -602,7 +603,7 @@ function MainApp({ user, onLogout }) {
             </div>
 
             <div className="track-scroll">
-              {TRACKS.map((tr, idx) => {
+              {TRACKS.filter(tr => assignedTracks.includes(tr.id)).map((tr, idx) => {
                 const allTr = RAW.filter(r => r[2] === tr.id);
                 const doneTr = allTr.filter(r => done[`${r[0]}-${r[1]}-${r[2]}`]).length;
                 return (
@@ -724,7 +725,7 @@ function MainApp({ user, onLogout }) {
 
             {/* All days of current week */}
             {DAYS.map((dayName, dayIdx) => {
-              const dayTasks = PLAN[week]?.[dayIdx] || [];
+              const dayTasks = (PLAN[week]?.[dayIdx] || []).filter(t => assignedTracks.includes(t.track));
               if (!dayTasks.length) return null;
               const isSelected = monthOffset === 0 && dayIdx === selDay;
               const dayDone = dayTasks.filter(t => done[t.id]).length;
