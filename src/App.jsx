@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef, memo, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { DAYS, TRACKS, RAW, RESOURCES, PLAN, MONTHS } from "./data.js";
+import { DAYS, TRACKS, RAW, RESOURCES, PLAN, MONTHS, ROADMAPS, PLANS, ALL_TRACKS, ALL_RAW, ALL_RESOURCES } from "./data.js";
 import "./App.css";
 
 // React Bits Components
@@ -78,8 +78,8 @@ const accordionVariants = {
 };
 
 /* ═══ EXPANDABLE TOPIC CARD ═══ */
-const TopicCard = memo(({ task, track, isDone, isExpanded, onToggleExpand, onToggleDone }) => {
-  const resources = RESOURCES[task.topic] || [];
+const TopicCard = memo(({ task, track, isDone, isExpanded, onToggleExpand, onToggleDone, activeResources }) => {
+  const resources = (activeResources || RESOURCES)[task.topic] || [];
   return (
     <motion.div className="roadmap-topic interactable" layout {...scaleIn}
       style={{ "--track-color": track.color, borderColor: isExpanded ? track.color + "44" : "var(--border)" }}>
@@ -186,18 +186,25 @@ function LoginScreen({ onLogin }) {
       return;
     }
     
-    setError("Connecting to DB...");
+    setError("Connecting...");
     const userKey = username.trim();
     
     let existsInDb = false;
+    let firebaseAvailable = true;
     const docRef = doc(db, "users", userKey);
     try {
       const snap = await getDoc(docRef);
       existsInDb = snap.exists();
     } catch (err) {
       console.error(err);
-      setError("Failed to connect to Firebase. Check internet or API keys.");
-      return;
+      // Firebase might have permission issues — allow local-only mode
+      if (err.code === 'permission-denied' || err.message?.includes('permission')) {
+        firebaseAvailable = false;
+        console.warn('Firebase permissions denied — falling back to local mode');
+      } else {
+        setError("Failed to connect. Check internet.");
+        return;
+      }
     }
 
     if (isSignUp) {
@@ -211,17 +218,37 @@ function LoginScreen({ onLogin }) {
       }
       
       // Save notification email, base progress & selected roadmap niches!
-      await setDoc(docRef, {
+      const userData = {
         username: userKey,
         email: email.trim(),
-        selectedTracks: selectedTracks.length > 0 ? selectedTracks : [0, 1, 2, 3], // fallback
+        selectedTracks: selectedTracks.length > 0 ? selectedTracks : [0, 1, 2, 3],
         startDate: new Date().toISOString(),
         progress: {},
         customTasks: [],
-        completedTaskNames: []
-      });
+        completedTaskNames: [],
+        joinedRoadmaps: ["faang-90"],
+        activeRoadmap: "faang-90"
+      };
+      
+      if (firebaseAvailable) {
+        try {
+          await setDoc(docRef, userData);
+        } catch (err) {
+          console.warn('Firebase write failed, using local storage', err);
+          localStorage.setItem(`vtask_user_${userKey}`, JSON.stringify(userData));
+        }
+      } else {
+        localStorage.setItem(`vtask_user_${userKey}`, JSON.stringify(userData));
+      }
     } else {
-      if (!existsInDb) {
+      if (!existsInDb && !firebaseAvailable) {
+        // In local mode, check localStorage
+        const localData = localStorage.getItem(`vtask_user_${userKey}`);
+        if (!localData) {
+          setError("Account not found. Please click 'Create Account' below to start fresh!");
+          return;
+        }
+      } else if (!existsInDb) {
         setError("Account not found. Please click 'Create Account' below to start fresh!");
         return;
       }
@@ -271,7 +298,7 @@ function LoginScreen({ onLogin }) {
           </div>
           {error && <div style={{ color: "#F87171", fontSize: 13, textAlign: "center", marginTop: -4 }}>{error}</div>}
           <button type="submit" className="create-btn interactable" style={{ marginTop: 10, padding: 16, fontSize: 15, fontWeight: 600 }}>
-            {isSignUp ? "Create Account &rarr;" : "Log In to Roadmap &rarr;"}
+            {isSignUp ? "Create Account →" : "Log In to Roadmap →"}
           </button>
         </form>
         
@@ -312,6 +339,17 @@ function MainApp({ user, onLogout }) {
   const [startDate, setStartDate] = useState(new Date().toISOString());
   const [assignedTracks, setAssignedTracks] = useState([0, 1, 2, 3]); // Loaded from Cloud
 
+  /* ═══ MULTI-ROADMAP STATE ═══ */
+  const [activeRoadmap, setActiveRoadmap] = useState("faang-90");
+  const [joinedRoadmaps, setJoinedRoadmaps] = useState(["faang-90"]);
+
+  // Derived active roadmap data
+  const activeRoadmapDef = useMemo(() => ROADMAPS.find(r => r.id === activeRoadmap) || ROADMAPS[0], [activeRoadmap]);
+  const activePlan = useMemo(() => PLANS[activeRoadmap] || PLAN, [activeRoadmap]);
+  const activeTracks = useMemo(() => ALL_TRACKS[activeRoadmap] || TRACKS, [activeRoadmap]);
+  const activeRaw = useMemo(() => ALL_RAW[activeRoadmap] || RAW, [activeRoadmap]);
+  const activeResources = useMemo(() => ALL_RESOURCES[activeRoadmap] || RESOURCES, [activeRoadmap]);
+
   const getDayOffset = Math.floor((now - new Date(startDate)) / (1000 * 60 * 60 * 24));
   const currentWeekIdx = Math.floor(getDayOffset / 7) + 1;
   const currentDayIdx = getDayOffset % 7;
@@ -321,6 +359,7 @@ function MainApp({ user, onLogout }) {
   // We'll wrap this greeting in ShinyText
   const greeting = hr < 12 ? "Good morning" : hr < 17 ? "Good afternoon" : "Good evening";
 
+  const maxWeeks = activeRoadmapDef.totalWeeks || 15;
   const [week, setWeek] = useState(Math.min(15, Math.max(1, currentWeekIdx)));
   const [selDay, setSelDay] = useState(Math.min(6, Math.max(0, currentDayIdx)));
   const [done, setDone] = useState({});
@@ -333,14 +372,47 @@ function MainApp({ user, onLogout }) {
   const [roadmapTrack, setRoadmapTrack] = useState(null);
   const [expandedTopic, setExpandedTopic] = useState(null);
   const [expandedWeek, setExpandedWeek] = useState(1);
-  const [monthOffset, setMonthOffset] = useState(0);
   const [notifsEnabled, setNotifsEnabled] = useState(false);
   const [alertEmail, setAlertEmail] = useState("");
   const scrollRef = useRef(null);
 
+  const openDetail = useCallback((task) => { window.history.pushState({ modal: 'detail' }, ''); setDetailTask(task); }, []);
+  const closeDetail = useCallback(() => { if (window.history.state?.modal === 'detail') window.history.back(); else setDetailTask(null); }, []);
+  const openCreate = useCallback(() => { window.history.pushState({ modal: 'create' }, ''); setShowCreate(true); }, []);
+  const closeCreate = useCallback(() => { if (window.history.state?.modal === 'create') window.history.back(); else setShowCreate(false); }, []);
+
+  useEffect(() => {
+    const handlePop = () => {
+      setDetailTask(null);
+      setShowCreate(false);
+    };
+    window.addEventListener("popstate", handlePop);
+    return () => window.removeEventListener("popstate", handlePop);
+  }, []);
+
   useEffect(() => {
     async function loadData() {
       if (!user) return;
+      
+      // Try localStorage first as baseline
+      const localKey = `vtask_user_${user}`;
+      const localData = localStorage.getItem(localKey);
+      if (localData) {
+        try {
+          const parsed = JSON.parse(localData);
+          if (parsed.startDate) setStartDate(parsed.startDate);
+          if (parsed.progress) setDone(parsed.progress);
+          if (parsed.customTasks) setCustomTasks(parsed.customTasks);
+          if (parsed.email) setAlertEmail(parsed.email);
+          if (parsed.selectedTracks) setAssignedTracks([...parsed.selectedTracks, 4]);
+          if (parsed.joinedRoadmaps && parsed.joinedRoadmaps.length > 0) {
+            setJoinedRoadmaps(parsed.joinedRoadmaps);
+            setActiveRoadmap(parsed.activeRoadmap || parsed.joinedRoadmaps[0]);
+          }
+        } catch (e) { console.warn('Local data parse error', e); }
+      }
+      
+      // Then try Firebase (may fail with permission errors)
       try {
         const docRef = doc(db, "users", user);
         const snap = await getDoc(docRef);
@@ -350,21 +422,42 @@ function MainApp({ user, onLogout }) {
           if (data.progress) setDone(data.progress);
           if (data.customTasks) setCustomTasks(data.customTasks);
           if (data.email) setAlertEmail(data.email);
-          if (data.selectedTracks) setAssignedTracks([...data.selectedTracks, 4]); // Always show track 4 (Mocks)
+          if (data.selectedTracks) setAssignedTracks([...data.selectedTracks, 4]);
+          if (data.joinedRoadmaps && data.joinedRoadmaps.length > 0) {
+            setJoinedRoadmaps(data.joinedRoadmaps);
+            setActiveRoadmap(data.activeRoadmap || data.joinedRoadmaps[0]);
+          }
+          // Sync to local as backup
+          localStorage.setItem(localKey, JSON.stringify(data));
         } else {
-          // Sync unexpected missing rows immediately
-          await setDoc(docRef, { startDate: new Date().toISOString(), progress: {}, customTasks: [] }, { merge: true });
+          const defaultData = { startDate: new Date().toISOString(), progress: {}, customTasks: [], joinedRoadmaps: ["faang-90"], activeRoadmap: "faang-90" };
+          try {
+            await setDoc(docRef, defaultData, { merge: true });
+          } catch (writeErr) {
+            console.warn('Firebase write failed', writeErr);
+          }
+          localStorage.setItem(localKey, JSON.stringify(defaultData));
         }
-        setIsDbLoaded(true);
       } catch (err) {
-        console.error("Firebase error", err);
+        console.warn("Firebase unavailable, using local storage:", err.message);
+        // Already loaded from localStorage above — just continue
       }
+      
+      setIsDbLoaded(true);
     }
     loadData();
     if (Notification.permission === "granted") setNotifsEnabled(true);
   }, [user]);
 
   const persist = useCallback(async d => {
+    // Always save locally first
+    try {
+      const localKey = `vtask_user_${user}`;
+      const existing = JSON.parse(localStorage.getItem(localKey) || '{}');
+      localStorage.setItem(localKey, JSON.stringify({ ...existing, progress: d }));
+    } catch(e) {}
+    
+    // Then try Firebase
     try {
       const completedTaskNames = [];
       Object.keys(d).forEach(id => {
@@ -373,22 +466,25 @@ function MainApp({ user, onLogout }) {
             const ct = customTasks.find(t => t.id === id);
             if (ct) completedTaskNames.push(ct.topic);
           } else {
-            const parts = id.split("-");
-            const r = RAW.find(t => t[0] == parts[0] && t[1] == parts[1] && t[2] == parts[2]);
-            if (r) completedTaskNames.push(r[3]);
+            const cleanId = id.includes(':') ? id.split(':')[1] : id;
+            const parts = cleanId.split("-");
+            for (const rmId of Object.keys(ALL_RAW)) {
+              const r = ALL_RAW[rmId].find(t => t[0] == parts[0] && t[1] == parts[1] && t[2] == parts[2]);
+              if (r) { completedTaskNames.push(r[3]); break; }
+            }
           }
         }
       });
       await setDoc(doc(db, "users", user), { progress: d, completedTaskNames }, { merge: true });
-    } catch(e){}
+    } catch(e) { console.warn('Firebase persist failed, saved locally', e.message); }
   }, [user, customTasks]);
 
   const todayTasks = useMemo(() => {
-    const roadmap = PLAN[week]?.[selDay] || [];
+    const roadmap = activePlan[week]?.[selDay] || [];
     const custom = customTasks.filter(t => t.week === week && t.day === selDay);
     const filteredRoadmap = roadmap.filter(t => assignedTracks.includes(t.track));
     return [...filteredRoadmap, ...custom];
-  }, [week, selDay, customTasks, assignedTracks]);
+  }, [week, selDay, customTasks, assignedTracks, activePlan]);
 
   const upcomingTasks = useMemo(() => {
     const all = [];
@@ -397,8 +493,8 @@ function MainApp({ user, onLogout }) {
     
     // Add roadmap tasks from tomorrow onwards in current week
     for (let d = selDay + 1; d < 6; d++) {
-      if (PLAN[currWeek]?.[d]) {
-        PLAN[currWeek][d].filter(t => assignedTracks.includes(t.track)).forEach(t => all.push({ ...t, dayLabel: DAYS[d], week: currWeek }));
+      if (activePlan[currWeek]?.[d]) {
+        activePlan[currWeek][d].filter(t => assignedTracks.includes(t.track)).forEach(t => all.push({ ...t, dayLabel: DAYS[d], week: currWeek }));
       }
     }
     // Add custom tasks
@@ -409,7 +505,7 @@ function MainApp({ user, onLogout }) {
     });
 
     return all.sort((a,b) => (a.week*10 + a.day) - (b.week*10 + b.day));
-  }, [week, selDay, customTasks]);
+  }, [week, selDay, customTasks, activePlan]);
 
   useEffect(() => {
     if (notifsEnabled) setupNotifications(todayTasks, done);
@@ -462,7 +558,7 @@ function MainApp({ user, onLogout }) {
         // Find if we have a pending task today matching this track approx
         const tTask = todayTasks.find(t => (t.track === targetTrackId || (t.track > targetTrackId)) && !done[t.id]);
         if (tTask) {
-          const trackDef = TRACKS[tTask.track] || TRACKS[0];
+          const trackDef = activeTracks[tTask.track] || TRACKS[tTask.track] || TRACKS[0];
           new Notification("Time to focus!", { body: `Ready for ${tTask.topic}? Hop in and crush your ${trackDef.label} task!` });
           localStorage.setItem(lastNotifKey, "true");
         }
@@ -472,19 +568,56 @@ function MainApp({ user, onLogout }) {
   }, [notifsEnabled, todayTasks, done]);
 
   const todayDone = useMemo(() => todayTasks.filter(t => done[t.id]).length, [todayTasks, done]);
-  const wkAll = useMemo(() => DAYS.flatMap((_, d) => (PLAN[week]?.[d] || []).filter(t => assignedTracks.includes(t.track))), [week, assignedTracks]);
+  const wkAll = useMemo(() => DAYS.flatMap((_, d) => (activePlan[week]?.[d] || []).filter(t => assignedTracks.includes(t.track))), [week, assignedTracks, activePlan]);
   const wkDone = useMemo(() => wkAll.filter(t => done[t.id]).length, [wkAll, done]);
-  const filteredRAW = useMemo(() => RAW.filter(r => assignedTracks.includes(r[2])), [assignedTracks]);
+  const filteredRAW = useMemo(() => activeRaw.filter(r => assignedTracks.includes(r[2])), [assignedTracks, activeRaw]);
   const totalAll = filteredRAW.length;
-  const totalDone = useMemo(() => filteredRAW.filter(r => done[`${r[0]}-${r[1]}-${r[2]}`]).length, [filteredRAW, done]);
+  const prefix = activeRoadmap + ':';
+  const totalDone = useMemo(() => filteredRAW.filter(r => done[`${prefix}${r[0]}-${r[1]}-${r[2]}`]).length, [filteredRAW, done, prefix]);
   const totalPct = totalAll ? totalDone / totalAll : 0;
 
-  // Month navigation
-  const viewDate = useMemo(() => {
-    const d = new Date();
-    d.setMonth(d.getMonth() + monthOffset);
-    return d;
-  }, [monthOffset]);
+  // Roadmap switcher helper
+  const switchRoadmap = useCallback((rmId) => {
+    setActiveRoadmap(rmId);
+    const rm = ROADMAPS.find(r => r.id === rmId);
+    if (rm) setWeek(prev => Math.min(prev, rm.totalWeeks));
+    setRoadmapTrack(null);
+    // Save to both localStorage and Firebase
+    try {
+      const localKey = `vtask_user_${user}`;
+      const existing = JSON.parse(localStorage.getItem(localKey) || '{}');
+      localStorage.setItem(localKey, JSON.stringify({ ...existing, activeRoadmap: rmId }));
+    } catch(e) {}
+    try { setDoc(doc(db, "users", user), { activeRoadmap: rmId }, { merge: true }); } catch(e) {};
+  }, [user]);
+
+  const joinRoadmap = useCallback((rmId) => {
+    if (joinedRoadmaps.includes(rmId)) return;
+    const updated = [...joinedRoadmaps, rmId];
+    setJoinedRoadmaps(updated);
+    try {
+      const localKey = `vtask_user_${user}`;
+      const existing = JSON.parse(localStorage.getItem(localKey) || '{}');
+      localStorage.setItem(localKey, JSON.stringify({ ...existing, joinedRoadmaps: updated }));
+    } catch(e) {}
+    try { setDoc(doc(db, "users", user), { joinedRoadmaps: updated }, { merge: true }); } catch(e) {};
+    showToast(`Joined ${ROADMAPS.find(r => r.id === rmId)?.label} ✨`);
+  }, [joinedRoadmaps, user]);
+
+  const leaveRoadmap = useCallback((rmId) => {
+    if (joinedRoadmaps.length <= 1) { showToast("You must have at least one active roadmap"); return; }
+    const updated = joinedRoadmaps.filter(id => id !== rmId);
+    setJoinedRoadmaps(updated);
+    const newActive = activeRoadmap === rmId ? updated[0] : activeRoadmap;
+    if (activeRoadmap === rmId) setActiveRoadmap(updated[0]);
+    try {
+      const localKey = `vtask_user_${user}`;
+      const existing = JSON.parse(localStorage.getItem(localKey) || '{}');
+      localStorage.setItem(localKey, JSON.stringify({ ...existing, joinedRoadmaps: updated, activeRoadmap: newActive }));
+    } catch(e) {}
+    try { setDoc(doc(db, "users", user), { joinedRoadmaps: updated, activeRoadmap: newActive }, { merge: true }); } catch(e) {};
+    showToast(`Left ${ROADMAPS.find(r => r.id === rmId)?.label}`);
+  }, [joinedRoadmaps, activeRoadmap, user]);
 
 
 
@@ -512,9 +645,11 @@ function MainApp({ user, onLogout }) {
         <AnimatePresence mode="wait">
         {/* ═══ ROADMAP VIEW ═══ */}
         {roadmapTrack !== null ? (() => {
-          const tr = TRACKS[roadmapTrack];
-          const trackTasks = RAW.filter(r => r[2] === roadmapTrack);
-          const trackDone = trackTasks.filter(r => done[`${r[0]}-${r[1]}-${r[2]}`]).length;
+          const tr = activeTracks[roadmapTrack];
+          if (!tr) { setRoadmapTrack(null); return null; }
+          const rmPrefix = activeRoadmap + ':';
+          const trackTasks = activeRaw.filter(r => r[2] === roadmapTrack);
+          const trackDone = trackTasks.filter(r => done[`${rmPrefix}${r[0]}-${r[1]}-${r[2]}`]).length;
           const trackPct = trackTasks.length ? Math.round(trackDone / trackTasks.length * 100) : 0;
           return (
             <motion.div className="page" key="roadmap" {...fadeUp}>
@@ -536,9 +671,9 @@ function MainApp({ user, onLogout }) {
                 <div style={{ fontSize: 12, color: "var(--sub)", marginTop: 8, textAlign: "right" }}>{trackPct}% complete</div>
               </motion.div>
 
-              {Array.from({ length: 15 }, (_, i) => {
+              {Array.from({ length: maxWeeks }, (_, i) => {
                 const w = i + 1;
-                const weekTasks = DAYS.map((_, d) => (PLAN[w]?.[d] || []).find(t => t.track === roadmapTrack)).filter(Boolean);
+                const weekTasks = DAYS.map((_, d) => (activePlan[w]?.[d] || []).find(t => t.track === roadmapTrack)).filter(Boolean);
                 const weekDone = weekTasks.filter(t => done[t.id]).length;
                 const isExp = expandedWeek === w;
                 return (
@@ -564,7 +699,8 @@ function MainApp({ user, onLogout }) {
                               <TopicCard key={task.id} task={task} track={tr} isDone={!!done[task.id]}
                                 isExpanded={expandedTopic === task.id}
                                 onToggleExpand={() => { haptic(); setExpandedTopic(expandedTopic === task.id ? null : task.id); }}
-                                onToggleDone={() => toggle(task.id)} />
+                                onToggleDone={() => toggle(task.id)}
+                                activeResources={activeResources} />
                             ))}
                           </div>
                         </motion.div>
@@ -589,11 +725,38 @@ function MainApp({ user, onLogout }) {
                   <BlurText text="Manage Your Daily Tasks" delay={50} className="greeting-blur" />
                 </div>
               </div>
-              <button className="week-badge interactable">Week {week}/15</button>
+              <button className="week-badge interactable">Week {week}/{maxWeeks}</button>
             </div>
 
+            {/* ═══ ROADMAP SWITCHER ═══ */}
+            {joinedRoadmaps.length > 1 && (
+              <div className="roadmap-switcher" style={{ display: 'flex', gap: 8, marginBottom: 16, overflowX: 'auto', paddingBottom: 4 }}>
+                {joinedRoadmaps.map(rmId => {
+                  const rm = ROADMAPS.find(r => r.id === rmId);
+                  if (!rm) return null;
+                  const isActive = activeRoadmap === rmId;
+                  return (
+                    <motion.button key={rmId}
+                      className={`interactable`}
+                      onClick={() => { haptic(); switchRoadmap(rmId); }}
+                      whileTap={{ scale: 0.96 }}
+                      style={{
+                        padding: '10px 18px', borderRadius: 12, fontSize: 13, fontWeight: 600,
+                        border: `1.5px solid ${rm.color}`,
+                        background: isActive ? rm.color : 'transparent',
+                        color: isActive ? '#0A0A0F' : rm.color,
+                        cursor: 'pointer', transition: 'all 0.2s', whiteSpace: 'nowrap',
+                        display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0
+                      }}>
+                      <span>{rm.icon}</span> {rm.label}
+                    </motion.button>
+                  );
+                })}
+              </div>
+            )}
+
             <div className="week-scroll">
-              {Array.from({ length: 15 }, (_, i) => {
+              {Array.from({ length: maxWeeks }, (_, i) => {
                 const w = i + 1, sel = w === week;
                 return (
                   <button key={w} className={`week-pill interactable${sel ? " active" : ""}`}
@@ -603,9 +766,10 @@ function MainApp({ user, onLogout }) {
             </div>
 
             <div className="track-scroll">
-              {TRACKS.filter(tr => assignedTracks.includes(tr.id)).map((tr, idx) => {
-                const allTr = RAW.filter(r => r[2] === tr.id);
-                const doneTr = allTr.filter(r => done[`${r[0]}-${r[1]}-${r[2]}`]).length;
+              {activeTracks.filter(tr => assignedTracks.includes(tr.id)).map((tr, idx) => {
+                const rmPrefix = activeRoadmap + ':';
+                const allTr = activeRaw.filter(r => r[2] === tr.id);
+                const doneTr = allTr.filter(r => done[`${rmPrefix}${r[0]}-${r[1]}-${r[2]}`]).length;
                 return (
                   <motion.div key={tr.id} initial={{ opacity:0,scale:0.9 }} animate={{ opacity:1,scale:1 }} transition={{ delay: idx*0.08 }}>
                     <SpotlightCard className="track-card interactable" spotlightColor="rgba(255, 255, 255, 0.15)">
@@ -623,7 +787,7 @@ function MainApp({ user, onLogout }) {
 
             <div className="section-header"><h2>Ongoing</h2><button className="see-all interactable" onClick={() => switchTab("calendar")}>See All</button></div>
             {todayTasks.map((task, idx) => {
-              const tr = TRACKS[task.track], isDone = !!done[task.id];
+              const tr = (activeTracks[task.track] || TRACKS[task.track] || TRACKS[0]), isDone = !!done[task.id];
               return (
                 <motion.div key={task.id} className={`task-card interactable${isDone ? " done" : ""}`}
                   style={{ "--track-color": tr.color }} initial={{ opacity:0,y:16 }} animate={{ opacity:1,y:0 }} transition={{ delay:(idx+3)*0.05 }}
@@ -652,7 +816,7 @@ function MainApp({ user, onLogout }) {
             {upcomingTasks.length > 0 && <>
               <div className="section-header" style={{ marginTop: 8 }}><h2>Upcoming</h2></div>
               {upcomingTasks.slice(0,6).map((task, idx) => {
-                const tr = TRACKS[task.track];
+                const tr = activeTracks[task.track] || TRACKS[task.track] || TRACKS[0];
                 return (
                   <motion.div key={task.id+"-up"} className="upcoming-item" initial={{ opacity:0,x:-10 }} animate={{ opacity:1,x:0 }} transition={{ delay: idx*0.04 }}>
                     <div className="upcoming-dot" style={{ background: tr.color }} />
@@ -667,14 +831,81 @@ function MainApp({ user, onLogout }) {
             </>}
 
             <div className="overall-card">
-              <div className="overall-label">Overall Journey</div>
+              <div className="overall-label">Overall Journey · {activeRoadmapDef.label}</div>
               <div className="overall-row">
                 <div className="overall-pct"><ShinyText text={`${Math.round(totalPct * 100)}%`} speed={4} /></div>
                 <div className="overall-info">
                   <div className="pbar" style={{ height: 6 }}><div className="pfill accent-gradient" style={{ width: `${totalPct*100}%` }} /></div>
-                  <span className="overall-sub">{totalDone} of {totalAll} tasks · Week {week}/15</span>
+                  <span className="overall-sub">{totalDone} of {totalAll} tasks · Week {week}/{maxWeeks}</span>
                 </div>
               </div>
+            </div>
+
+            {/* ═══ DISCOVER ROADMAPS ═══ */}
+            <div className="section-header" style={{ marginTop: 28 }}><h2>Discover Roadmaps</h2></div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 16 }}>
+              {ROADMAPS.map((rm, idx) => {
+                const isJoined = joinedRoadmaps.includes(rm.id);
+                const isActive = activeRoadmap === rm.id;
+                const rmRaw = ALL_RAW[rm.id] || [];
+                const rmDone = rmRaw.filter(r => done[`${rm.id}:${r[0]}-${r[1]}-${r[2]}`]).length;
+                const rmPct = rmRaw.length ? Math.round(rmDone / rmRaw.length * 100) : 0;
+                return (
+                  <motion.div key={rm.id}
+                    initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: idx * 0.08 }}
+                    className="discover-card interactable"
+                    style={{
+                      background: `linear-gradient(135deg, ${rm.color}11 0%, ${rm.color}06 100%)`,
+                      border: `1px solid ${isActive ? rm.color : rm.color + '33'}`,
+                      borderRadius: 18, padding: '20px', cursor: 'pointer',
+                      position: 'relative', overflow: 'hidden',
+                      transition: 'all 0.3s cubic-bezier(0.16, 1, 0.3, 1)'
+                    }}
+                    onClick={() => {
+                      if (!isJoined) { joinRoadmap(rm.id); switchRoadmap(rm.id); }
+                      else { switchRoadmap(rm.id); }
+                    }}>
+                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
+                      <div style={{
+                        width: 48, height: 48, borderRadius: 14,
+                        background: rm.color + '1A',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        fontSize: 24, flexShrink: 0
+                      }}>{rm.icon}</div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                          <span style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)' }}>{rm.label}</span>
+                          {isActive && <span style={{
+                            fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 6,
+                            background: rm.color, color: '#0A0A0F', textTransform: 'uppercase', letterSpacing: '0.05em'
+                          }}>Active</span>}
+                        </div>
+                        <div style={{ fontSize: 13, color: 'var(--sub)', lineHeight: 1.4, marginBottom: 10 }}>{rm.description}</div>
+                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+                          {rm.tags.map(tag => (
+                            <span key={tag} style={{
+                              fontSize: 10, fontWeight: 600, padding: '3px 8px', borderRadius: 6,
+                              background: rm.color + '15', color: rm.color, letterSpacing: '0.03em'
+                            }}>{tag}</span>
+                          ))}
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                          <div className="pbar" style={{ flex: 1, marginTop: 0, height: 5 }}>
+                            <div className="pfill" style={{ width: `${rmPct}%`, background: rm.color }} />
+                          </div>
+                          <span style={{ fontSize: 11, color: rm.color, fontWeight: 600, flexShrink: 0 }}>{rmPct}%</span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 6 }}>
+                          <span style={{ fontSize: 11, color: 'var(--sub)' }}>{rm.totalDays} days · {rm.difficulty}</span>
+                          <span style={{ fontSize: 12, fontWeight: 600, color: isJoined ? rm.color : 'var(--sub)' }}>
+                            {isJoined ? (isActive ? 'Currently Active' : 'Switch →') : 'Join →'}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </motion.div>
+                );
+              })}
             </div>
           </motion.div>
         )
@@ -684,71 +915,82 @@ function MainApp({ user, onLogout }) {
           <motion.div className="page" key="calendar" {...fadeUp}>
             <div className="cal-header">
               <div className="cal-title-row">
-                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <button className="month-arrow interactable" onClick={() => { haptic(); setMonthOffset(o => o-1); }}>‹</button>
-                  <h2>{MONTHS[viewDate.getMonth()]} {viewDate.getFullYear()}</h2>
-                  <button className="month-arrow interactable" onClick={() => { haptic(); setMonthOffset(o => o+1); }}>›</button>
-                </div>
-                <div className="cal-view-btns">
-                  <div className="view-btn">☰</div>
-                  <div className="view-btn active">⊞</div>
-                </div>
+                <h2 style={{ fontSize: 22, fontWeight: 800, letterSpacing: "-0.5px" }}>Schedule</h2>
+                <div style={{ fontSize: 13, color: "var(--sub)", background: "var(--card)", padding: "4px 10px", borderRadius: 12 }}>{wkDone}/{wkAll.length} this week</div>
               </div>
-              {monthOffset === 0 && <>
-                <div className="day-labels">{DAYS.map(d => <span key={d} className="day-label">{d}</span>)}</div>
-                <div className="date-pills">
-                  {DAYS.map((d, i) => {
-                    const pillDate = new Date(startDate);
-                    pillDate.setDate(pillDate.getDate() + (week - 1) * 7 + i);
-                    return (
-                      <button key={d} onClick={() => { haptic(); setSelDay(i); }}
-                        className={`date-pill interactable${i === selDay ? " active" : ""}${i === clampedToday && week === currentWeekIdx && i !== selDay ? " today" : ""}`}>
-                        {pillDate.getDate()}
-                      </button>
-                    )
-                  })}
-                </div>
-              </>}
-            </div>
 
-            <div className="cal-time-label">{monthOffset === 0 ? "College Hours — 10:00 PM" : `Viewing ${MONTHS[viewDate.getMonth()]} ${viewDate.getFullYear()}`}</div>
-
-            {/* Week selector for non-current months */}
-            {monthOffset !== 0 && (
-              <div className="week-scroll" style={{ marginBottom: 16 }}>
-                {Array.from({ length: 15 }, (_, i) => {
-                  const w = i + 1;
-                  return <button key={w} className={`week-pill interactable${w === week ? " active" : ""}`} onClick={() => { haptic(); setWeek(w); }}>W{w}</button>;
+              {/* Week selector - always visible */}
+              <div className="week-scroll" style={{ marginTop: 16 }}>
+                {Array.from({ length: maxWeeks }, (_, i) => {
+                  const w = i + 1, sel = w === week;
+                  return <button key={w} className={`week-pill interactable${sel ? " active" : ""}`} onClick={() => { haptic(); setWeek(w); }}>{sel ? `W${w} ★` : `W${w}`}</button>;
                 })}
               </div>
-            )}
 
-            {/* All days of current week */}
+              {/* Modern Day Selector */}
+              <div className="modern-day-scroll" style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 8, marginTop: 20, scrollbarWidth: "none", msOverflowStyle: "none" }}>
+                {DAYS.map((d, i) => {
+                  const pillDate = new Date(startDate);
+                  pillDate.setDate(pillDate.getDate() + (week - 1) * 7 + i);
+                  const dayOfWeek = pillDate.toLocaleDateString('en-US', { weekday: 'short' });
+                  const dateNum = pillDate.getDate();
+                  const isSel = i === selDay;
+                  const isToday = i === clampedToday && week === currentWeekIdx;
+                  return (
+                    <button key={d} onClick={() => { haptic(); setSelDay(i); }}
+                      className="interactable"
+                      style={{
+                        flex: "0 0 auto",
+                        minWidth: 64,
+                        padding: "12px 4px",
+                        borderRadius: 16,
+                        display: "flex", flexDirection: "column", alignItems: "center", gap: 6,
+                        background: isSel ? "var(--accent)" : "var(--card)",
+                        color: isSel ? "#fff" : "var(--text)",
+                        border: `1px solid ${isSel ? "var(--accent)" : isToday ? "var(--accent)" : "var(--border)"}`,
+                        transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
+                        boxShadow: isSel ? "0 8px 16px -4px rgba(99, 102, 241, 0.4)" : "none"
+                      }}>
+                      <span style={{ fontSize: 11, textTransform: "uppercase", fontWeight: 700, color: isSel ? "rgba(255,255,255,0.9)" : "var(--sub)", letterSpacing: "0.5px" }}>
+                        {d.includes('Review') ? 'REST' : dayOfWeek}
+                      </span>
+                      <span style={{ fontSize: 20, fontWeight: 800 }}>{dateNum}</span>
+                      {isToday && !isSel && <div style={{ width: 4, height: 4, borderRadius: "50%", background: "var(--accent)", marginTop: 2, position: "absolute", bottom: 6 }} />}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+
+            {/* Single day of current week */}
             {DAYS.map((dayName, dayIdx) => {
-              const dayTasks = (PLAN[week]?.[dayIdx] || []).filter(t => assignedTracks.includes(t.track));
-              if (!dayTasks.length) return null;
-              const isSelected = monthOffset === 0 && dayIdx === selDay;
+              if (dayIdx !== selDay) return null;
+              const dayTasks = (activePlan[week]?.[dayIdx] || []).filter(t => assignedTracks.includes(t.track));
               const dayDone = dayTasks.filter(t => done[t.id]).length;
               return (
-                <motion.div key={dayName} initial={{ opacity:0,y:12 }} animate={{ opacity:1,y:0 }} transition={{ delay: dayIdx*0.05 }} style={{ marginBottom: 16 }}>
+                <motion.div key={dayName} initial={{ opacity:0,y:12 }} animate={{ opacity:1,y:0 }} transition={{ delay: 0.05 }} style={{ marginBottom: 16 }}>
                   <div className="timeline">
                     <div className="timeline-line" />
                     <div className="timeline-header">
-                      <div className={`timeline-dot${isSelected ? " active" : ""}`} />
+                      <div className="timeline-dot active" />
                       <span className="timeline-day">{dayName}</span>
                       <div className="timeline-date">{(() => { 
                         const d = new Date(startDate); 
                         d.setDate(d.getDate() + (week - 1) * 7 + dayIdx);
                         return `${d.getDate()} ${MONTHS[d.getMonth()].substring(0,3)}`;
                       })()}</div>
-                      <span style={{ fontSize: 12, color: "var(--sub)", marginLeft: "auto" }}>{dayDone}/{dayTasks.length}</span>
+                      <span style={{ fontSize: 12, color: dayDone === dayTasks.length && dayTasks.length > 0 ? "var(--green)" : "var(--sub)", marginLeft: "auto", fontWeight: 600 }}>{dayDone}/{dayTasks.length}{dayDone === dayTasks.length && dayTasks.length > 0 ? " ✓" : ""}</span>
                     </div>
-                    {dayTasks.map((task, idx) => {
-                      const tr = TRACKS[task.track], isDone = !!done[task.id];
+                    {dayTasks.length === 0 ? (
+                      <div style={{ padding: "32px 20px", textAlign: "center", color: "var(--sub)", fontSize: 14, background: "var(--card)", borderRadius: 12, border: "1px dashed var(--border)", marginTop: 12 }}>
+                        No tasks scheduled for this day. Enjoy your rest! ☕
+                      </div>
+                    ) : dayTasks.map((task, idx) => {
+                      const tr = (activeTracks[task.track] || TRACKS[task.track] || TRACKS[0]), isDone = !!done[task.id];
                       return (
                         <div key={task.id}>
                           <div className={`cal-task-card interactable${isDone ? " done" : ""}`}
-                            style={{ "--track-color": tr.color }} onClick={() => setDetailTask(task)}>
+                            style={{ "--track-color": tr.color }} onClick={() => openDetail(task)}>
                             <div className="cal-task-time" style={{ color: tr.color }}>{tr.sublabel}</div>
                             <div className="cal-task-title" style={{ textDecoration: isDone ? "line-through" : "none" }}>{task.topic}</div>
                             <div className="cal-task-sub">{task.sub}</div>
@@ -793,7 +1035,7 @@ function MainApp({ user, onLogout }) {
             <div className="notif-hero">
               <div className="notif-hero-title">Today's Schedule</div>
               {todayTasks.map((task, idx) => {
-                const tr = TRACKS[task.track], isDone = !!done[task.id];
+                const tr = (activeTracks[task.track] || TRACKS[task.track] || TRACKS[0]), isDone = !!done[task.id];
                 return (
                   <motion.div key={task.id} className="notif-item" initial={{ opacity:0,x:-8 }} animate={{ opacity:1,x:0 }} transition={{ delay: idx*0.06 }}>
                     <div className="avatar" style={{ background: tr.bg }}>{tr.icon}</div>
@@ -803,9 +1045,10 @@ function MainApp({ user, onLogout }) {
                 );
               })}
             </div>
-            <h3 className="section-title">Track Progress</h3>
-            {TRACKS.map((tr, idx) => {
-              const allTr = RAW.filter(r => r[2] === tr.id), doneTr = allTr.filter(r => done[`${r[0]}-${r[1]}-${r[2]}`]).length;
+            <h3 className="section-title">Track Progress · {activeRoadmapDef.label}</h3>
+            {activeTracks.filter(tr => assignedTracks.includes(tr.id)).map((tr, idx) => {
+              const rmPrefix = activeRoadmap + ':';
+              const allTr = activeRaw.filter(r => r[2] === tr.id), doneTr = allTr.filter(r => done[`${rmPrefix}${r[0]}-${r[1]}-${r[2]}`]).length;
               const pct = allTr.length ? Math.round(doneTr/allTr.length*100) : 0;
               return (
                 <motion.div key={tr.id} className="notif-item" initial={{ opacity:0,y:8 }} animate={{ opacity:1,y:0 }} transition={{ delay:(idx+3)*0.06 }}>
@@ -839,6 +1082,57 @@ function MainApp({ user, onLogout }) {
                   </motion.div>
                 ))}
             </div>
+
+            <h3 className="section-title">Active Tracks · {activeRoadmapDef.label}</h3>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 16 }}>
+              {activeTracks.map(t => {
+                const isActive = assignedTracks.includes(t.id);
+                return (
+                  <div key={t.id} className="interactable" onClick={() => {
+                    const updated = isActive
+                      ? assignedTracks.filter(x => x !== t.id)
+                      : [...assignedTracks, t.id];
+                    setAssignedTracks(updated);
+                    try { setDoc(doc(db, "users", user), { selectedTracks: updated }, { merge: true }); } catch(e) {}
+                    showToast(isActive ? `${t.label} removed` : `${t.label} added ✓`);
+                  }} style={{
+                    padding: "10px 16px", borderRadius: 10, fontSize: 13,
+                    border: "1px solid " + t.color,
+                    background: isActive ? t.color : "transparent",
+                    color: isActive ? "#0A0A0F" : t.color,
+                    fontWeight: 600, cursor: "pointer", transition: "all 0.2s"
+                  }}>
+                    {t.icon} {t.label} {isActive ? "✓" : "+"}
+                  </div>
+                );
+              })}
+            </div>
+
+            <h3 className="section-title">My Roadmaps</h3>
+            <div style={{ display: "flex", flexDirection: 'column', gap: 8, marginBottom: 16 }}>
+              {ROADMAPS.map(rm => {
+                const isJoined = joinedRoadmaps.includes(rm.id);
+                return (
+                  <div key={rm.id} className="menu-item interactable" onClick={() => {
+                    haptic();
+                    if (isJoined) { leaveRoadmap(rm.id); }
+                    else { joinRoadmap(rm.id); switchRoadmap(rm.id); }
+                  }} style={{ border: isJoined ? `1px solid ${rm.color}44` : undefined }}>
+                    <div className="menu-left">
+                      <span className="menu-icon">{rm.icon}</span>
+                      <div>
+                        <span style={{ fontWeight: 600 }}>{rm.label}</span>
+                        <div style={{ fontSize: 11, color: 'var(--sub)', marginTop: 2 }}>{rm.totalDays} days · {rm.difficulty}</div>
+                      </div>
+                    </div>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: isJoined ? rm.color : 'var(--sub)' }}>
+                      {isJoined ? (activeRoadmap === rm.id ? 'Active ✓' : 'Leave') : 'Join +'}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+
             <h3 className="section-title">General</h3>
             <div className="menu-item interactable" style={{ cursor: "default", flexDirection: "column", alignItems: "flex-start", gap: 8 }}>
               <div className="menu-left" style={{ width: "100%" }}>
@@ -868,8 +1162,8 @@ function MainApp({ user, onLogout }) {
       {/* ═══ TASK DETAIL ═══ */}
       <AnimatePresence>
         {detailTask && (() => {
-          const tr = TRACKS[detailTask.track], isDone = !!done[detailTask.id];
-          const resources = RESOURCES[detailTask.topic] || [];
+          const tr = (activeTracks[detailTask.track] || TRACKS[detailTask.track] || TRACKS[0]), isDone = !!done[detailTask.id];
+          const resources = (activeResources[detailTask.topic] || RESOURCES[detailTask.topic] || []);
           
           const getYoutubeId = (url) => {
             const match = url?.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/);
@@ -905,7 +1199,7 @@ function MainApp({ user, onLogout }) {
             <motion.div className="detail-overlay" key="detail" initial={{ opacity:0 }} animate={{ opacity:1 }} exit={{ opacity:0 }}>
               <motion.div className="detail-page" {...slideRight}>
                 <div className="detail-nav">
-                  <button className="detail-back interactable" onClick={() => setDetailTask(null)}>
+                  <button className="detail-back interactable" onClick={closeDetail}>
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--text)" strokeWidth="2" strokeLinecap="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
                   </button>
                   <button className={`detail-done-btn interactable${isDone?" completed":""}`} onClick={e => toggle(detailTask.id, e)}>
@@ -990,16 +1284,16 @@ function MainApp({ user, onLogout }) {
       {/* ═══ CREATE MODAL ═══ */}
       <AnimatePresence>
         {showCreate && (
-          <motion.div className="modal-overlay" initial={{ opacity:0 }} animate={{ opacity:1 }} exit={{ opacity:0 }} onClick={() => setShowCreate(false)}>
+          <motion.div className="modal-overlay" initial={{ opacity:0 }} animate={{ opacity:1 }} exit={{ opacity:0 }} onClick={closeCreate}>
             <motion.div className="modal" initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }} transition={{ type: "spring", stiffness: 280, damping: 28 }} onClick={e => e.stopPropagation()} style={{ maxHeight: '90vh', overflowY: 'auto' }}>
-              <div className="modal-header"><h2>Create New Task</h2><button className="modal-close interactable" onClick={() => setShowCreate(false)}>✕</button></div>
+              <div className="modal-header"><h2>Create New Task</h2><button className="modal-close interactable" onClick={closeCreate}>✕</button></div>
               <div className="form-group"><label>Task Name</label><input className="input-field" placeholder="Enter task name..." value={newTask.name} onChange={e => setNewTask({ ...newTask, name: e.target.value })} /></div>
               <div className="form-group"><label>Description</label><textarea className="input-field" placeholder="Add description..." value={newTask.desc} onChange={e => setNewTask({ ...newTask, desc: e.target.value })} /></div>
               
               <div className="modal-row" style={{ display:'flex', gap:10 }}>
                 <div className="form-group" style={{ flex:1 }}><label>Week</label>
                   <select className="input-field" value={newTask.week} onChange={e => setNewTask({ ...newTask, week: parseInt(e.target.value) })}>
-                    {[...Array(15)].map((_, i) => <option key={i+1} value={i+1}>Week {i+1}</option>)}
+                    {[...Array(maxWeeks)].map((_, i) => <option key={i+1} value={i+1}>Week {i+1}</option>)}
                   </select>
                 </div>
                 <div className="form-group" style={{ flex:1 }}><label>Day</label>
@@ -1010,7 +1304,7 @@ function MainApp({ user, onLogout }) {
               </div>
 
               <div className="form-group"><label>Track (Category)</label>
-                <div className="priority-row" style={{ flexWrap: 'wrap' }}>{TRACKS.map(tr => (
+                <div className="priority-row" style={{ flexWrap: 'wrap' }}>{activeTracks.map(tr => (
                   <button key={tr.id} className={`priority-option interactable${newTask.track === tr.id ? " active" : ""}`} style={{ "--p-color": tr.color, flex: '1 1 30%', fontSize:11 }}
                     onClick={() => setNewTask({ ...newTask, track: tr.id })}>{tr.label}</button>
                 ))}</div>
@@ -1044,18 +1338,24 @@ function MainApp({ user, onLogout }) {
                 
                 const updatedCustom = [...customTasks, taskObj];
                 setCustomTasks(updatedCustom);
-                setDoc(doc(db, "users", user), { customTasks: updatedCustom }, { merge: true });
+                // Save to both localStorage and Firebase
+                try {
+                  const localKey = `vtask_user_${user}`;
+                  const existing = JSON.parse(localStorage.getItem(localKey) || '{}');
+                  localStorage.setItem(localKey, JSON.stringify({ ...existing, customTasks: updatedCustom }));
+                } catch(e) {}
+                try { setDoc(doc(db, "users", user), { customTasks: updatedCustom }, { merge: true }); } catch(e) {}
 
                 showToast("Task created & synced! ✨"); 
-                setShowCreate(false); 
-                setNewTask({ name: "", desc: "", priority: "Medium", track: 0, week: 1, day: 0 });
+                closeCreate(); 
+                setNewTask({ name: "", desc: "", priority: "Medium", track: 0, week: week, day: selDay });
               }}>Create Task</button>
             </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
 
-      <button className="fab interactable" onClick={() => { haptic("heavy"); setShowCreate(true); }}>
+      <button className="fab interactable" onClick={() => { haptic("heavy"); openCreate(); }}>
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="#0A0A0F" strokeWidth="2.5" strokeLinecap="round"/></svg>
       </button>
 
