@@ -1,12 +1,23 @@
 import { useState, useEffect, useCallback, useRef, memo, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { DAYS, TRACKS, RAW, RESOURCES, PLAN, MONTHS, ROADMAPS, PLANS, ALL_TRACKS, ALL_RAW, ALL_RESOURCES } from "./data.js";
+import { DAYS, TRACKS, RAW, RESOURCES, PLAN, ROADMAPS, PLANS, ALL_TRACKS, ALL_RAW, ALL_RESOURCES } from "./data.js";
 import "./App.css";
 
 // React Bits Components
 import BlurText from "./components/BlurText.jsx";
 import ShinyText from "./components/ShinyText.jsx";
 import SpotlightCard from "./components/SpotlightCard.jsx";
+import GradientButtonGroupBottom from "./components/GradientButtonGroupBottom.jsx";
+import RoadmapInteractiveTree from "./components/RoadmapInteractiveTree.jsx";
+import Heatmap from "./components/Heatmap.jsx";
+import TaskDetailCenter from "./components/TaskDetailCenter.jsx";
+import GanttCalendar from "./components/GanttCalendar.jsx";
+import SidebarLeft from "./components/SidebarLeft.jsx";
+import SidebarRight from "./components/SidebarRight.jsx";
+import TopHeader from "./components/TopHeader.jsx";
+import ProfileModal from "./components/ProfileModal.jsx";
+import TaskModal from "./components/TaskModal.jsx";
+import MeetingModal from "./components/MeetingModal.jsx";
 
 import { doc, getDoc, setDoc } from "firebase/firestore";
 import { db } from "./firebase";
@@ -56,10 +67,9 @@ function setupNotifications(todayTasks, done) {
 /* ═══ PREMIUM VARIANTS ═══ */
 const spring = { type: "spring", stiffness: 300, damping: 25 };
 const fadeUp = { 
-  initial: { opacity: 0, y: 14, filter: "blur(4px)" }, 
-  animate: { opacity: 1, y: 0, filter: "blur(0px)" }, 
-  exit: { opacity: 0, y: -10, filter: "blur(4px)" }, 
-  transition: { duration: 0.4, ease: [0.22, 1, 0.36, 1] } 
+  initial: { opacity: 0, y: 16, filter: "blur(6px)" }, 
+  animate: { opacity: 1, y: 0, filter: "blur(0px)", transition: { duration: 0.6, ease: [0.16, 1, 0.3, 1] } }, 
+  exit: { opacity: 0, y: -12, filter: "blur(4px)", transition: { duration: 0.4, ease: [0.16, 1, 0.3, 1] } }
 };
 const scaleIn = { 
   initial: { opacity: 0, scale: 0.96, filter: "blur(4px)" }, 
@@ -85,11 +95,26 @@ const TopicCard = memo(({ task, track, isDone, isExpanded, onToggleExpand, onTog
       style={{ "--track-color": track.color, borderColor: isExpanded ? track.color + "44" : "var(--border)" }}>
       <div className="roadmap-topic-row" onClick={onToggleExpand}>
         <div className="roadmap-topic-left">
-          <button className="check-btn interactable" onClick={(e) => { e.stopPropagation(); onToggleDone(); }}
-            style={{ width: 22, height: 22, borderRadius: 6, border: `2px solid ${track.color}`,
+          <button className="check-btn interactable" 
+            onClick={(e) => { 
+              e.stopPropagation(); 
+              if (resources.length === 0) onToggleDone(); 
+              else {
+                // If it has resources, we could expand or alert. Let's just expand for now.
+                if (!isExpanded) onToggleExpand(e);
+              }
+            }}
+            style={{ 
+              width: 22, height: 22, borderRadius: 6, 
+              border: `2px solid ${resources.length > 0 && !isDone ? 'var(--border)' : track.color}`,
               background: isDone ? track.color : "transparent", flexShrink: 0,
-              display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", transition: "all .2s" }}>
+              display: "flex", alignItems: "center", justifyContent: "center", 
+              cursor: resources.length > 0 && !isDone ? "not-allowed" : "pointer", 
+              transition: "all .2s",
+              opacity: resources.length > 0 && !isDone ? 0.5 : 1
+            }}>
             {isDone && <svg width="10" height="8" viewBox="0 0 12 10"><path d="M1 5L4.5 8.5L11 1" stroke="#0A0A0F" strokeWidth="2.2" fill="none" strokeLinecap="round"/></svg>}
+            {(resources.length > 0 && !isDone) && <span style={{fontSize: 10, color: 'var(--text-dim)'}}>↳</span>}
           </button>
           <div>
             <div className="roadmap-topic-title" style={{ textDecoration: isDone ? "line-through" : "none", opacity: isDone ? 0.5 : 1 }}>{task.topic}</div>
@@ -118,13 +143,13 @@ const TopicCard = memo(({ task, track, isDone, isExpanded, onToggleExpand, onTog
               </div>
               <div className="topic-detail-row">
                 <span className="topic-detail-label">Difficulty</span>
-                <span className="priority-badge" style={{ "--p-color": task.diff === "Hard" ? "#F87171" : task.diff === "Medium" ? "#FCD34D" : "#6EE7B7" }}>
+                <span className="priority-badge" style={{ "--p-color": task.diff === "Hard" ? "var(--red)" : task.diff === "Medium" ? "var(--yellow)" : "var(--green)" }}>
                   {task.diff || "Medium"}
                 </span>
               </div>
               <div className="topic-detail-row">
                 <span className="topic-detail-label">Priority</span>
-                <span className="priority-badge" style={{ "--p-color": task.pri === "High" || task.hrs >= 3 ? "#F87171" : "#FCD34D" }}>
+                <span className="priority-badge" style={{ "--p-color": task.pri === "High" || task.hrs >= 3 ? "var(--red)" : "var(--yellow)" }}>
                   {task.pri || (task.hrs >= 3 ? "High" : "Medium")}
                 </span>
               </div>
@@ -258,13 +283,13 @@ function LoginScreen({ onLogin }) {
   };
 
   return (
-    <div className="app-shell" style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
-      <motion.div className="detail-page" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} style={{ position: "relative", inset: "auto", background: "var(--card)", padding: 40, borderRadius: 20, maxWidth: 400, width: "100%", boxShadow: "0 10px 40px rgba(0,0,0,0.5)" }}>
+    <div className="app-shell" style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "100dvh", padding: 20 }}>
+      <motion.div className="auth-card" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={spring}>
         <div style={{ textAlign: "center", marginBottom: 30 }}>
-          <div className="avatar" style={{ margin: "0 auto 16px", width: 56, height: 56, background: "rgba(167,139,250,0.15)", color: "#A78BFA", fontSize: 24 }}>{isSignUp ? "✨" : "🗝️"}</div>
-          <h1 className="hero-title" style={{ fontSize: 24, marginBottom: 8 }}>{isSignUp ? "Start Your Journey" : "Welcome Back"}</h1>
-          <p className="hero-subtitle" style={{ fontSize: 13, lineHeight: 1.5 }}>
-            {isSignUp ? "Create a local profile to begin tracking your 90-Day FAANG progress independently." : "Sign in to safely securely access your progress saved on this device."}
+          <div className="avatar" style={{ margin: "0 auto 16px", width: 56, height: 56, background: "var(--accent-glow-strong)", color: "var(--accent2)", fontSize: 24, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: "var(--radius-md)" }}>{isSignUp ? "✨" : "🗝️"}</div>
+          <h1 className="hero-title" style={{ fontSize: 24, marginBottom: 8, fontWeight: 800, letterSpacing: "-0.02em" }}>{isSignUp ? "Start Your Journey" : "Welcome Back"}</h1>
+          <p className="hero-subtitle" style={{ fontSize: 13, lineHeight: 1.5, color: "var(--sub)" }}>
+            {isSignUp ? "Create a local profile to begin tracking your FAANG progress independently." : "Sign in to securely access your progress saved on this device."}
           </p>
         </div>
         <form onSubmit={handleAuth} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
@@ -296,7 +321,7 @@ function LoginScreen({ onLogin }) {
             <label style={{ fontSize: 13, color: "var(--sub)" }}>Password (Optional)</label>
             <input className="input-field" type="password" placeholder="••••••••" value={password} onChange={e => { setPassword(e.target.value); setError(""); }} />
           </div>
-          {error && <div style={{ color: "#F87171", fontSize: 13, textAlign: "center", marginTop: -4 }}>{error}</div>}
+          {error && <div style={{ color: "var(--red)", fontSize: 13, textAlign: "center", marginTop: -4 }}>{error}</div>}
           <button type="submit" className="create-btn interactable" style={{ marginTop: 10, padding: 16, fontSize: 15, fontWeight: 600 }}>
             {isSignUp ? "Create Account →" : "Log In to Roadmap →"}
           </button>
@@ -304,7 +329,7 @@ function LoginScreen({ onLogin }) {
         
         <div style={{ marginTop: 24, textAlign: "center", fontSize: 13, color: "var(--sub)" }}>
           {isSignUp ? "Already have an account? " : "New to the roadmap? "}
-          <span className="interactable" style={{ color: "#A78BFA", cursor: "pointer", fontWeight: 600 }} onClick={() => { setIsSignUp(!isSignUp); setError(""); setUsername(""); setPassword("") }}>
+          <span className="interactable" style={{ color: "var(--accent2)", cursor: "pointer", fontWeight: 600 }} onClick={() => { setIsSignUp(!isSignUp); setError(""); setUsername(""); setPassword("") }}>
             {isSignUp ? "Log in" : "Create Account"}
           </span>
         </div>
@@ -313,12 +338,231 @@ function LoginScreen({ onLogin }) {
   );
 }
 
+/* ═══ TASK CENTER VIEW ═══ */
+const TaskCenterView = ({ detailTask, TRACKS, activeTracks, activeResources, RESOURCES, closeDetail, fadeUp, doneMap, onToggleDone }) => {
+  const tr = (activeTracks?.[detailTask.track] || TRACKS?.[detailTask.track] || TRACKS?.[0] || { color: '#888', label: 'General' });
+  const resources = (activeResources?.[detailTask.topic] || RESOURCES?.[detailTask.topic] || []);
+
+  return (
+    <motion.div className="page" key="task-center" {...fadeUp} style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 100px)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
+        <button className="interactable" onClick={closeDetail} style={{ background: 'var(--glass)', border: '1px solid var(--border)', color: 'var(--sub)', padding: '8px 16px', borderRadius: 8, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 600 }}>
+          <span>←</span> Back to Dashboard
+        </button>
+      </div>
+
+      <div style={{ padding: '0 16px', flex: 1, overflowY: 'auto', paddingBottom: 64 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+          <span style={{ background: `${tr.color}22`, color: tr.color, padding: '4px 10px', borderRadius: 6, fontSize: 12, fontWeight: 700 }}>{tr.label}</span>
+          <span style={{ color: 'var(--sub)', fontSize: 13 }}>Week {detailTask[0]} • Day {detailTask[1]}</span>
+        </div>
+        
+        <h1 style={{ fontSize: 42, fontWeight: 800, color: 'var(--text)', marginBottom: 24, lineHeight: 1.1 }}>{detailTask.topic}</h1>
+        
+        <div style={{ fontSize: 16, color: 'var(--text-secondary)', lineHeight: 1.7, marginBottom: 40, maxWidth: 800 }}>
+          {detailTask.desc ? (
+            <div dangerouslySetInnerHTML={{ __html: detailTask.desc }} />
+          ) : (
+            'No description provided for this topic.'
+          )}
+        </div>
+
+        {(() => {
+          const learningMaterials = resources ? resources.filter(res => typeof res === 'string' || !res.difficulty) : [];
+          const practiceProblems = resources ? resources.filter(res => typeof res !== 'string' && res.difficulty) : [];
+          
+          return (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 32 }}>
+              {learningMaterials.length > 0 && (
+                <div style={{ border: '1px solid var(--border)', borderRadius: 16, padding: 24, background: 'rgba(255,255,255,0.02)', maxWidth: 800 }}>
+                  <h3 style={{ fontSize: 18, fontWeight: 700, color: 'var(--text)', marginBottom: 20 }}>Learning Resources</h3>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                    {learningMaterials.map((res, i) => {
+                      const isStr = typeof res === 'string';
+                      const rName = isStr ? res : (res.name || res.title || "Resource");
+                      const rLink = isStr ? res : (res.link || res.url || '#');
+                      const rId = isStr ? `${detailTask.id}:res-${i}` : `${detailTask.id}:${res.id || i}`;
+                      const isDone = !!(doneMap && doneMap[rId]);
+                      
+                      let badge = "Article";
+                      let badgeColor = "#FBBF24";
+                      if (rName.toLowerCase().includes('official') || rName.toLowerCase().includes('doc')) {
+                        badge = "Official";
+                        badgeColor = "#60A5FA";
+                      } else if (rName.toLowerCase().includes('video') || rName.toLowerCase().includes('youtube')) {
+                        badge = "Video";
+                        badgeColor = "#F87171";
+                      } else if (rName.toLowerCase().includes('feed') || rName.toLowerCase().includes('blog')) {
+                        badge = "Feed";
+                        badgeColor = "#A78BFA";
+                      }
+
+                      return (
+                        <div key={i} className="premium-resource-card">
+                          <div 
+                            className={`premium-check-btn ${isDone ? 'checked' : ''}`}
+                            onClick={(e) => { e.stopPropagation(); onToggleDone(rId, e, detailTask, resources); }}
+                            style={{
+                              border: `2px solid ${isDone ? tr.color : 'rgba(255,255,255,0.15)'}`,
+                              background: isDone ? tr.color : "transparent", 
+                              color: isDone ? '#0A0A0F' : 'transparent',
+                              flexShrink: 0
+                            }}
+                          >
+                            {isDone && <svg width="14" height="12" viewBox="0 0 12 10" style={{position:'relative', zIndex: 10}}><path d="M1 5L4.5 8.5L11 1" stroke="currentColor" strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                          </div>
+                          <a href={rLink} target="_blank" rel="noopener noreferrer" style={{ display: 'flex', alignItems: 'center', gap: 16, flex: 1, textDecoration: 'none', position: 'relative', zIndex: 2 }}>
+                            <div className="premium-badge-icon" style={{ background: `${badgeColor}22`, color: badgeColor }}>
+                              {badge === 'Video' ? '▶' : badge === 'Official' ? '📚' : badge === 'Feed' ? 'RSS' : '📄'}
+                            </div>
+                            <div style={{ flex: 1, overflow: 'hidden' }}>
+                              <div style={{ fontSize: 16, fontWeight: 600, color: isDone ? 'var(--sub)' : 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginBottom: 4, textDecoration: isDone ? 'line-through' : 'none', transition: 'color 0.3s' }}>{rName}</div>
+                              <div style={{ fontSize: 13, color: badgeColor, fontWeight: 600, display: 'inline-block' }}>{badge}</div>
+                            </div>
+                            <div className="premium-arrow">↗</div>
+                          </a>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {practiceProblems.length > 0 && (
+                <div style={{ border: '1px solid var(--border)', borderRadius: 16, padding: 24, background: 'var(--card)', maxWidth: 800 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+                    <h3 style={{ fontSize: 18, fontWeight: 700, color: 'var(--text)' }}>Practice Problems</h3>
+                    <div style={{ fontSize: 13, color: 'var(--sub)', fontWeight: 600 }}>{practiceProblems.filter(p => doneMap && doneMap[`${detailTask.id}:${p.id || p.title}`]).length} / {practiceProblems.length} Solved</div>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                    {practiceProblems.map((res, i) => {
+                      const rId = `${detailTask.id}:${res.id || i}`;
+                      const isDone = !!(doneMap && doneMap[rId]);
+                      const isEasy = res.difficulty === 'E';
+                      const isMed = res.difficulty === 'M';
+                      const isHard = res.difficulty === 'H';
+                      const badgeColor = isEasy ? '#3FB950' : isMed ? '#D29922' : isHard ? '#F85149' : '#7C8B9B';
+                      const badgeText = isEasy ? 'Easy' : isMed ? 'Medium' : isHard ? 'Hard' : 'Theory';
+                      
+                      return (
+                        <div key={i} style={{ 
+                          display: 'flex', alignItems: 'center', gap: 16, padding: '16px 20px', 
+                          border: '1px solid var(--border)',
+                          borderRadius: 12,
+                          background: isDone ? 'var(--glass)' : 'var(--card-solid)',
+                          boxShadow: '0 2px 8px var(--glass)',
+                          transition: 'background 0.2s, transform 0.2s'
+                        }}>
+                          <div 
+                            className={`premium-check-btn ${isDone ? 'checked' : ''}`}
+                            onClick={(e) => { e.stopPropagation(); onToggleDone(rId, e, detailTask, resources); }}
+                            style={{
+                              width: 20, height: 20, borderRadius: 6,
+                              border: `2px solid ${isDone ? '#3FB950' : 'var(--text-secondary)'}`,
+                              background: isDone ? '#3FB950' : "transparent", 
+                              color: isDone ? '#fff' : 'transparent',
+                              display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0
+                            }}
+                          >
+                            {isDone && <svg width="12" height="10" viewBox="0 0 12 10"><path d="M1 5L4.5 8.5L11 1" stroke="currentColor" strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                          </div>
+                          <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 12 }}>
+                            <a href={res.link || res.url || '#'} target="_blank" rel="noopener noreferrer" style={{ fontSize: 15, fontWeight: 600, color: isDone ? 'var(--sub)' : 'var(--text)', textDecoration: isDone ? 'line-through' : 'none', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: 1 }}>
+                              {res.title || res.name}
+                            </a>
+                          </div>
+                          <div style={{ color: badgeColor, fontSize: 13, fontWeight: 700, width: 60, textAlign: 'right' }}>
+                            {badgeText}
+                          </div>
+                          <a href={res.link || res.url || '#'} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--sub)', display: 'flex', alignItems: 'center', padding: '6px 8px', borderRadius: 6, background: 'var(--glass)', textDecoration: 'none', transition: 'all 0.2s', fontSize: 13, fontWeight: 600 }}>
+                            Solve ↗
+                          </a>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })()}
+      </div>
+    </motion.div>
+  );
+};
+
+const HomeRoadmapSwitcher = ({ joinedRoadmaps, activeRoadmap, ROADMAPS, switchRoadmap, haptic }) => {
+  const scrollRef = useRef(null);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(false);
+
+  const checkScroll = () => {
+    if (scrollRef.current) {
+      const { scrollLeft, scrollWidth, clientWidth } = scrollRef.current;
+      setCanScrollLeft(scrollLeft > 0);
+      setCanScrollRight(Math.ceil(scrollLeft) < scrollWidth - clientWidth);
+    }
+  };
+
+  useEffect(() => {
+    checkScroll();
+    window.addEventListener('resize', checkScroll);
+    return () => window.removeEventListener('resize', checkScroll);
+  }, [joinedRoadmaps]);
+
+  const scroll = (dir) => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollBy({ left: dir * 200, behavior: 'smooth' });
+      setTimeout(checkScroll, 300);
+    }
+  };
+
+  if (Object.keys(joinedRoadmaps).length <= 1) return null;
+
+  return (
+    <div style={{ position: 'relative', marginBottom: 24, display: 'flex', alignItems: 'center' }}>
+      {canScrollLeft && (
+        <button onClick={() => scroll(-1)} style={{ position: 'absolute', left: -10, zIndex: 2, background: 'linear-gradient(to right, var(--bg) 60%, transparent)', border: 'none', color: 'var(--text)', cursor: 'pointer', height: '100%', padding: '0 24px 0 10px', display: 'flex', alignItems: 'center' }}>
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+        </button>
+      )}
+      <div ref={scrollRef} onScroll={checkScroll} style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 4, scrollBehavior: 'smooth', scrollbarWidth: 'none', msOverflowStyle: 'none' }} className="hide-scrollbar">
+        {Object.keys(joinedRoadmaps).map(rmId => {
+          const rm = ROADMAPS.find(r => r.id === rmId);
+          if (!rm) return null;
+          const isActive = activeRoadmap === rmId;
+          return (
+            <motion.button key={rmId}
+              className="interactable"
+              onClick={() => { haptic(); switchRoadmap(rmId); }}
+              whileTap={{ scale: 0.96 }}
+              style={{
+                padding: '10px 18px', borderRadius: 12, fontSize: 13, fontWeight: 600,
+                border: `1.5px solid ${rm.color}`,
+                background: isActive ? rm.color : 'transparent',
+                color: isActive ? '#0A0A0F' : rm.color,
+                cursor: 'pointer', transition: 'all 0.2s', whiteSpace: 'nowrap',
+                display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0
+              }}>
+              <span>{rm.icon}</span> {rm.label}
+            </motion.button>
+          );
+        })}
+      </div>
+      {canScrollRight && (
+        <button onClick={() => scroll(1)} style={{ position: 'absolute', right: -10, zIndex: 2, background: 'linear-gradient(to left, var(--bg) 60%, transparent)', border: 'none', color: 'var(--text)', cursor: 'pointer', height: '100%', padding: '0 10px 0 24px', display: 'flex', alignItems: 'center' }}>
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+        </button>
+      )}
+    </div>
+  );
+};
+
 /* ═══ ROADMAP APP WRAPPER ═══ */
 export default function App() {
   const [user, setUser] = useState(() => {
     try { return localStorage.getItem("vtask_logged_in_user") || null; } catch(e) { return null; }
   });
-
   if (!user) {
     return <LoginScreen onLogin={(u) => {
       localStorage.setItem("vtask_logged_in_user", u);
@@ -341,7 +585,9 @@ function MainApp({ user, onLogout }) {
 
   /* ═══ MULTI-ROADMAP STATE ═══ */
   const [activeRoadmap, setActiveRoadmap] = useState("faang-90");
-  const [joinedRoadmaps, setJoinedRoadmaps] = useState(["faang-90"]);
+  const [joinedRoadmaps, setJoinedRoadmaps] = useState({ "faang-90": Date.now() });
+  const [userProfile, setUserProfile] = useState({ name: user || "User", avatar: "", email: "", theme: "dark" });
+  const [selectedActivityDate, setSelectedActivityDate] = useState(null);
 
   // Derived active roadmap data
   const activeRoadmapDef = useMemo(() => ROADMAPS.find(r => r.id === activeRoadmap) || ROADMAPS[0], [activeRoadmap]);
@@ -350,7 +596,8 @@ function MainApp({ user, onLogout }) {
   const activeRaw = useMemo(() => ALL_RAW[activeRoadmap] || RAW, [activeRoadmap]);
   const activeResources = useMemo(() => ALL_RESOURCES[activeRoadmap] || RESOURCES, [activeRoadmap]);
 
-  const getDayOffset = Math.floor((now - new Date(startDate)) / (1000 * 60 * 60 * 24));
+  const joinedDate = joinedRoadmaps[activeRoadmap] || Date.now();
+  const getDayOffset = Math.floor((now - new Date(joinedDate)) / (1000 * 60 * 60 * 24));
   const currentWeekIdx = Math.floor(getDayOffset / 7) + 1;
   const currentDayIdx = getDayOffset % 7;
   const clampedToday = currentDayIdx;
@@ -367,28 +614,74 @@ function MainApp({ user, onLogout }) {
   const [toast, setToast] = useState(null);
   const [detailTask, setDetailTask] = useState(null);
   const [showCreate, setShowCreate] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [newTask, setNewTask] = useState({ name: "", desc: "", priority: "Medium", track: 0, week: 1, day: 0 });
   const [customTasks, setCustomTasks] = useState([]);
+  const [meetings, setMeetings] = useState([]);
+  const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
+  const [isMeetingModalOpen, setIsMeetingModalOpen] = useState(false);
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+  const [liveProjects, setLiveProjects] = useState([]);
   const [roadmapTrack, setRoadmapTrack] = useState(null);
   const [expandedTopic, setExpandedTopic] = useState(null);
   const [expandedWeek, setExpandedWeek] = useState(1);
   const [notifsEnabled, setNotifsEnabled] = useState(false);
   const [alertEmail, setAlertEmail] = useState("");
+  const [rightWidth, setRightWidth] = useState(350);
   const scrollRef = useRef(null);
+  const isResizing = useRef(false);
+
+  const startResize = useCallback((e) => {
+    isResizing.current = true;
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+  }, []);
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', userProfile.theme || 'dark');
+  }, [userProfile.theme]);
+
+  useEffect(() => {
+    const handleMouseMove = (e) => {
+      if (!isResizing.current) return;
+      const newWidth = document.body.clientWidth - e.clientX;
+      if (newWidth > 250 && newWidth < 600) setRightWidth(newWidth);
+    };
+    const handleMouseUp = () => {
+      if (isResizing.current) {
+        isResizing.current = false;
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+      }
+    };
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+    return () => { document.removeEventListener('mousemove', handleMouseMove); document.removeEventListener('mouseup', handleMouseUp); };
+  }, []);
 
   const openDetail = useCallback((task) => { window.history.pushState({ modal: 'detail' }, ''); setDetailTask(task); }, []);
   const closeDetail = useCallback(() => { if (window.history.state?.modal === 'detail') window.history.back(); else setDetailTask(null); }, []);
-  const openCreate = useCallback(() => { window.history.pushState({ modal: 'create' }, ''); setShowCreate(true); }, []);
-  const closeCreate = useCallback(() => { if (window.history.state?.modal === 'create') window.history.back(); else setShowCreate(false); }, []);
+  const openCreate = useCallback(() => { setIsTaskModalOpen(true); }, []);
+  const closeCreate = useCallback(() => { setIsTaskModalOpen(false); }, []);
 
+  // Back button handler for modals
   useEffect(() => {
-    const handlePop = () => {
+    const handlePopState = () => {
+      setIsTaskModalOpen(false);
       setDetailTask(null);
-      setShowCreate(false);
     };
-    window.addEventListener("popstate", handlePop);
-    return () => window.removeEventListener("popstate", handlePop);
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
   }, []);
+
+  // Auto-scroll to top when section changes
+  useEffect(() => {
+    const sr = document.querySelector('.sidebar-right');
+    if (sr) sr.scrollTop = 0;
+    const ac = document.querySelector('.app-content');
+    if (ac) ac.scrollTop = 0;
+    window.scrollTo(0, 0);
+  }, [detailTask, tab, activeRoadmap]);
 
   useEffect(() => {
     async function loadData() {
@@ -400,14 +693,22 @@ function MainApp({ user, onLogout }) {
       if (localData) {
         try {
           const parsed = JSON.parse(localData);
-          if (parsed.startDate) setStartDate(parsed.startDate);
           if (parsed.progress) setDone(parsed.progress);
           if (parsed.customTasks) setCustomTasks(parsed.customTasks);
+          if (parsed.meetings) setMeetings(parsed.meetings);
+          if (parsed.liveProjects) setLiveProjects(parsed.liveProjects);
           if (parsed.email) setAlertEmail(parsed.email);
           if (parsed.selectedTracks) setAssignedTracks([...parsed.selectedTracks, 4]);
-          if (parsed.joinedRoadmaps && parsed.joinedRoadmaps.length > 0) {
-            setJoinedRoadmaps(parsed.joinedRoadmaps);
-            setActiveRoadmap(parsed.activeRoadmap || parsed.joinedRoadmaps[0]);
+          if (parsed.userProfile) setUserProfile(parsed.userProfile);
+          if (parsed.joinedRoadmaps) {
+            let jr = parsed.joinedRoadmaps;
+            if (Array.isArray(jr)) {
+              const newJr = {};
+              jr.forEach(rmId => { newJr[rmId] = Date.now(); });
+              jr = newJr;
+            }
+            setJoinedRoadmaps(jr);
+            setActiveRoadmap(parsed.activeRoadmap || Object.keys(jr)[0]);
           }
         } catch (e) { console.warn('Local data parse error', e); }
       }
@@ -418,30 +719,33 @@ function MainApp({ user, onLogout }) {
         const snap = await getDoc(docRef);
         if (snap.exists()) {
           const data = snap.data();
-          if (data.startDate) setStartDate(data.startDate);
           if (data.progress) setDone(data.progress);
           if (data.customTasks) setCustomTasks(data.customTasks);
+          if (data.meetings) setMeetings(data.meetings);
+          if (data.liveProjects) setLiveProjects(data.liveProjects);
           if (data.email) setAlertEmail(data.email);
           if (data.selectedTracks) setAssignedTracks([...data.selectedTracks, 4]);
-          if (data.joinedRoadmaps && data.joinedRoadmaps.length > 0) {
-            setJoinedRoadmaps(data.joinedRoadmaps);
-            setActiveRoadmap(data.activeRoadmap || data.joinedRoadmaps[0]);
+          if (data.userProfile) setUserProfile(data.userProfile);
+          if (data.joinedRoadmaps) {
+            let jr = data.joinedRoadmaps;
+            if (Array.isArray(jr)) {
+              const newJr = {};
+              jr.forEach(rmId => { newJr[rmId] = Date.now(); });
+              jr = newJr;
+            }
+            setJoinedRoadmaps(jr);
+            setActiveRoadmap(data.activeRoadmap || Object.keys(jr)[0]);
           }
           // Sync to local as backup
           localStorage.setItem(localKey, JSON.stringify(data));
         } else {
-          const defaultData = { startDate: new Date().toISOString(), progress: {}, customTasks: [], joinedRoadmaps: ["faang-90"], activeRoadmap: "faang-90" };
+          const defaultData = { progress: {}, customTasks: [], meetings: [], liveProjects: [], joinedRoadmaps: { "faang-90": Date.now() }, activeRoadmap: "faang-90", userProfile: { name: user, avatar: "", email: "", theme: "dark" } };
           try {
             await setDoc(docRef, defaultData, { merge: true });
-          } catch (writeErr) {
-            console.warn('Firebase write failed', writeErr);
-          }
+          } catch (writeErr) {}
           localStorage.setItem(localKey, JSON.stringify(defaultData));
         }
-      } catch (err) {
-        console.warn("Firebase unavailable, using local storage:", err.message);
-        // Already loaded from localStorage above — just continue
-      }
+      } catch (err) {}
       
       setIsDbLoaded(true);
     }
@@ -449,16 +753,17 @@ function MainApp({ user, onLogout }) {
     if (Notification.permission === "granted") setNotifsEnabled(true);
   }, [user]);
 
-  const persist = useCallback(async d => {
-    // Always save locally first
-    try {
-      const localKey = `vtask_user_${user}`;
-      const existing = JSON.parse(localStorage.getItem(localKey) || '{}');
-      localStorage.setItem(localKey, JSON.stringify({ ...existing, progress: d }));
-    } catch(e) {}
-    
-    // Then try Firebase
-    try {
+  const pendingUpdates = useRef({});
+  const flushTimeout = useRef(null);
+
+  const flushToDatabase = useCallback(async () => {
+    if (Object.keys(pendingUpdates.current).length === 0) return;
+    const payload = { ...pendingUpdates.current };
+    pendingUpdates.current = {}; // clear pending
+
+    // Generate completedTaskNames on the fly if progress is updated
+    if (payload.progress) {
+      const d = payload.progress;
       const completedTaskNames = [];
       Object.keys(d).forEach(id => {
         if (d[id]) {
@@ -475,54 +780,117 @@ function MainApp({ user, onLogout }) {
           }
         }
       });
-      await setDoc(doc(db, "users", user), { progress: d, completedTaskNames }, { merge: true });
-    } catch(e) { console.warn('Firebase persist failed, saved locally', e.message); }
+      payload.completedTaskNames = completedTaskNames;
+    }
+
+    try {
+      await setDoc(doc(db, "users", user), payload, { merge: true });
+    } catch(e) { }
   }, [user, customTasks]);
 
-  const todayTasks = useMemo(() => {
-    const roadmap = activePlan[week]?.[selDay] || [];
-    const custom = customTasks.filter(t => t.week === week && t.day === selDay);
-    const filteredRoadmap = roadmap.filter(t => assignedTracks.includes(t.track));
-    return [...filteredRoadmap, ...custom];
-  }, [week, selDay, customTasks, assignedTracks, activePlan]);
+  const persist = useCallback((data) => {
+    try {
+      const localKey = `vtask_user_${user}`;
+      const existing = JSON.parse(localStorage.getItem(localKey) || '{}');
+      localStorage.setItem(localKey, JSON.stringify({ ...existing, ...data }));
+    } catch(e) {}
+    
+    pendingUpdates.current = { ...pendingUpdates.current, ...data };
+    if (flushTimeout.current) clearTimeout(flushTimeout.current);
+    flushTimeout.current = setTimeout(() => flushToDatabase(), 3000);
+  }, [user, flushToDatabase]);
+
+  const rmPrefix = activeRoadmap + ':';
+  const combinedTasks = useMemo(() => {
+    return [
+      ...activeRaw.map(t => {
+        const tCopy = [...t];
+        tCopy.id = `${rmPrefix}${t[0]}-${t[1]}-${t[2]}`;
+        return { ...tCopy, id: tCopy.id, 0: t[0], 1: t[1], 2: t[2], 3: t[3], 4: t[4], 5: t[5], 6: t[6], 7: t[7], 8: t[8], 9: t[9], 10: t[10], topic: t[3], sub: t[4], hrs: t[5], desc: t[8], probs: t[9], res: t[10], track: t[2], week: t[0], day: t[1] };
+      }),
+      ...customTasks.filter(ct => ct.roadmapId === activeRoadmap).map(ct => ({
+        ...ct,
+        0: ct.week,
+        1: ct.day,
+        2: ct.track,
+        3: ct.topic,
+        4: ct.sub,
+        hrs: ct.hrs,
+        desc: ct.desc,
+        res: ct.res,
+        probs: ct.probs,
+        track: ct.track,
+        week: ct.week,
+        day: ct.day
+      }))
+    ];
+  }, [activeRaw, customTasks, activeRoadmap, rmPrefix]);
+
+  const actualTodayTasks = useMemo(() => {
+    return combinedTasks.filter(t => 
+      t.week === currentWeekIdx && 
+      t.day === currentDayIdx && 
+      assignedTracks.includes(t.track)
+    );
+  }, [combinedTasks, currentWeekIdx, currentDayIdx, assignedTracks]);
+
+  const incompletePastTasks = useMemo(() => {
+    return combinedTasks.filter(t => {
+      const tDaysElapsed = (t.week - 1) * 7 + t.day;
+      const currentDaysElapsed = (currentWeekIdx - 1) * 7 + currentDayIdx;
+      return tDaysElapsed < currentDaysElapsed && assignedTracks.includes(t.track) && !done[t.id];
+    });
+  }, [combinedTasks, currentWeekIdx, currentDayIdx, assignedTracks, done]);
 
   const upcomingTasks = useMemo(() => {
-    const all = [];
-    const now = new Date();
-    const currWeek = week;
-    
-    // Add roadmap tasks from tomorrow onwards in current week
-    for (let d = selDay + 1; d < 6; d++) {
-      if (activePlan[currWeek]?.[d]) {
-        activePlan[currWeek][d].filter(t => assignedTracks.includes(t.track)).forEach(t => all.push({ ...t, dayLabel: DAYS[d], week: currWeek }));
-      }
-    }
-    // Add custom tasks
-    customTasks.forEach(t => {
-      if (t.week > currWeek || (t.week === currWeek && t.day > selDay)) {
-        all.push({ ...t, dayLabel: DAYS[t.day], week: t.week });
-      }
-    });
-
-    return all.sort((a,b) => (a.week*10 + a.day) - (b.week*10 + b.day));
-  }, [week, selDay, customTasks, activePlan]);
+    return combinedTasks.filter(t => {
+      const tDaysElapsed = (t.week - 1) * 7 + t.day;
+      const currentDaysElapsed = (currentWeekIdx - 1) * 7 + currentDayIdx;
+      return tDaysElapsed > currentDaysElapsed && assignedTracks.includes(t.track) && !done[t.id];
+    }).sort((a,b) => (a.week*10 + a.day) - (b.week*10 + b.day)).map(t => ({ ...t, dayLabel: DAYS[t.day] }));
+  }, [combinedTasks, currentWeekIdx, currentDayIdx, assignedTracks, done]);
 
   useEffect(() => {
-    if (notifsEnabled) setupNotifications(todayTasks, done);
-  }, [notifsEnabled, todayTasks, done]);
+    if (notifsEnabled) setupNotifications(actualTodayTasks, done);
+  }, [notifsEnabled, actualTodayTasks, done]);
 
-  const toggle = useCallback((id, e) => {
+  const toggle = useCallback((id, e, parentTask, resources) => {
     if (e) e.stopPropagation();
+
+    if (typeof id === 'string' && id.includes(':')) {
+      const rmId = id.split(':')[0];
+      const isRoadmapTask = ROADMAPS.some(r => r.id === rmId);
+      if (isRoadmapTask && !joinedRoadmaps[rmId]) {
+        setToast("You must join this roadmap to track progress!");
+        setTimeout(() => setToast(null), 3000);
+        return;
+      }
+    }
+
     haptic("medium");
     setDone(prev => {
       const n = { ...prev };
       const isDone = !n[id];
-      if (isDone) n[id] = true;
+      if (isDone) n[id] = new Date().toISOString();
       else delete n[id];
-      persist(n);
+
+      if (parentTask && resources) {
+        const allDone = resources.every((res, i) => {
+          const isStr = typeof res === 'string';
+          const rId = isStr ? `${parentTask.id}:res-${i}` : `${parentTask.id}:${res.id || i}`;
+          return !!n[rId];
+        });
+        if (allDone) {
+          n[parentTask.id] = new Date().toISOString();
+        } else {
+          delete n[parentTask.id];
+        }
+      }
+
+      persist({ progress: n });
       return n;
     });
-  }, [persist]);
+  }, [persist, joinedRoadmaps]);
 
   const showToast = msg => { setToast(msg); setTimeout(() => setToast(null), 2800); };
 
@@ -556,7 +924,7 @@ function MainApp({ user, onLogout }) {
       
       if (targetTrackId !== null) {
         // Find if we have a pending task today matching this track approx
-        const tTask = todayTasks.find(t => (t.track === targetTrackId || (t.track > targetTrackId)) && !done[t.id]);
+        const tTask = actualTodayTasks.find(t => (t.track === targetTrackId || (t.track > targetTrackId)) && !done[t.id]);
         if (tTask) {
           const trackDef = activeTracks[tTask.track] || TRACKS[tTask.track] || TRACKS[0];
           new Notification("Time to focus!", { body: `Ready for ${tTask.topic}? Hop in and crush your ${trackDef.label} task!` });
@@ -565,9 +933,9 @@ function MainApp({ user, onLogout }) {
       }
     }, 60000); // Check every minute
     return () => clearInterval(interval);
-  }, [notifsEnabled, todayTasks, done]);
+  }, [notifsEnabled, actualTodayTasks, done]);
 
-  const todayDone = useMemo(() => todayTasks.filter(t => done[t.id]).length, [todayTasks, done]);
+  const todayDone = useMemo(() => actualTodayTasks.filter(t => done[t.id]).length, [actualTodayTasks, done]);
   const wkAll = useMemo(() => DAYS.flatMap((_, d) => (activePlan[week]?.[d] || []).filter(t => assignedTracks.includes(t.track))), [week, assignedTracks, activePlan]);
   const wkDone = useMemo(() => wkAll.filter(t => done[t.id]).length, [wkAll, done]);
   const filteredRAW = useMemo(() => activeRaw.filter(r => assignedTracks.includes(r[2])), [assignedTracks, activeRaw]);
@@ -582,42 +950,62 @@ function MainApp({ user, onLogout }) {
     const rm = ROADMAPS.find(r => r.id === rmId);
     if (rm) setWeek(prev => Math.min(prev, rm.totalWeeks));
     setRoadmapTrack(null);
-    // Save to both localStorage and Firebase
-    try {
-      const localKey = `vtask_user_${user}`;
-      const existing = JSON.parse(localStorage.getItem(localKey) || '{}');
-      localStorage.setItem(localKey, JSON.stringify({ ...existing, activeRoadmap: rmId }));
-    } catch(e) {}
-    try { setDoc(doc(db, "users", user), { activeRoadmap: rmId }, { merge: true }); } catch(e) {};
-  }, [user]);
+    // Only persist to localStorage and Firebase if joined
+    if (joinedRoadmaps[rmId]) {
+      try {
+        const localKey = `vtask_user_${user}`;
+        const existing = JSON.parse(localStorage.getItem(localKey) || '{}');
+        localStorage.setItem(localKey, JSON.stringify({ ...existing, activeRoadmap: rmId }));
+      } catch(e) {}
+      try { setDoc(doc(db, "users", user), { activeRoadmap: rmId }, { merge: true }); } catch(e) {};
+    }
+  }, [user, joinedRoadmaps]);
 
   const joinRoadmap = useCallback((rmId) => {
-    if (joinedRoadmaps.includes(rmId)) return;
-    const updated = [...joinedRoadmaps, rmId];
+    if (joinedRoadmaps[rmId]) return;
+    const updated = { ...joinedRoadmaps, [rmId]: Date.now() };
     setJoinedRoadmaps(updated);
     try {
       const localKey = `vtask_user_${user}`;
       const existing = JSON.parse(localStorage.getItem(localKey) || '{}');
-      localStorage.setItem(localKey, JSON.stringify({ ...existing, joinedRoadmaps: updated }));
+      localStorage.setItem(localKey, JSON.stringify({ ...existing, joinedRoadmaps: updated, activeRoadmap: rmId }));
     } catch(e) {}
-    try { setDoc(doc(db, "users", user), { joinedRoadmaps: updated }, { merge: true }); } catch(e) {};
+    try { setDoc(doc(db, "users", user), { joinedRoadmaps: updated, activeRoadmap: rmId }, { merge: true }); } catch(e) {};
     showToast(`Joined ${ROADMAPS.find(r => r.id === rmId)?.label} ✨`);
   }, [joinedRoadmaps, user]);
 
   const leaveRoadmap = useCallback((rmId) => {
-    if (joinedRoadmaps.length <= 1) { showToast("You must have at least one active roadmap"); return; }
-    const updated = joinedRoadmaps.filter(id => id !== rmId);
+    if (Object.keys(joinedRoadmaps).length <= 1) { showToast("You must have at least one active roadmap"); return; }
+    
+    const rmPrefix = rmId + ':';
+    const updatedDone = { ...done };
+    let hasChanges = false;
+    for (const key in updatedDone) {
+      if (key.startsWith(rmPrefix)) {
+        delete updatedDone[key];
+        hasChanges = true;
+      }
+    }
+    if (hasChanges) setDone(updatedDone);
+
+    const updated = { ...joinedRoadmaps };
+    delete updated[rmId];
     setJoinedRoadmaps(updated);
-    const newActive = activeRoadmap === rmId ? updated[0] : activeRoadmap;
-    if (activeRoadmap === rmId) setActiveRoadmap(updated[0]);
+    
+    let newActive = activeRoadmap;
+    if (activeRoadmap === rmId && tab !== 'roadmap') {
+      newActive = Object.keys(updated)[0];
+      setActiveRoadmap(newActive);
+    }
+
     try {
       const localKey = `vtask_user_${user}`;
       const existing = JSON.parse(localStorage.getItem(localKey) || '{}');
-      localStorage.setItem(localKey, JSON.stringify({ ...existing, joinedRoadmaps: updated, activeRoadmap: newActive }));
+      localStorage.setItem(localKey, JSON.stringify({ ...existing, joinedRoadmaps: updated, activeRoadmap: newActive, ...(hasChanges && { done: updatedDone }) }));
     } catch(e) {}
-    try { setDoc(doc(db, "users", user), { joinedRoadmaps: updated, activeRoadmap: newActive }, { merge: true }); } catch(e) {};
+    try { setDoc(doc(db, "users", user), { joinedRoadmaps: updated, activeRoadmap: newActive, ...(hasChanges && { done: updatedDone }) }, { merge: true }); } catch(e) {};
     showToast(`Left ${ROADMAPS.find(r => r.id === rmId)?.label}`);
-  }, [joinedRoadmaps, activeRoadmap, user]);
+  }, [joinedRoadmaps, activeRoadmap, user, tab, done]);
 
 
 
@@ -629,223 +1017,407 @@ function MainApp({ user, onLogout }) {
     { id: "profile", label: "Profile", path: "M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" },
   ];
 
+
+
   if (!isDbLoaded) {
     return <div className="app-shell" style={{ display: "flex", alignItems: "center", justifyContent: "center", color: "var(--sub)", fontSize: 13 }}>Syncing with Firebase Cloud...</div>;
   }
 
+  const showRightSidebar = tab === "home" || detailTask !== null;
+  const isOverlayMode = tab === 'roadmap' && detailTask !== null;
+  const computedRightWidth = isOverlayMode ? 0 : rightWidth;
+
   return (
-    <div className="app-shell" ref={scrollRef}>
+    <div className="dashboard-layout" ref={scrollRef} style={{ '--right-sidebar-width': showRightSidebar ? `${computedRightWidth}px` : '0px', '--left-sidebar-width': tab === 'roadmap' ? '0px' : '250px' }}>
       <AnimatePresence>{toast && (
-        <motion.div className="toast-container" initial={{ opacity:0,y:-14,scale:0.9 }} animate={{ opacity:1,y:0,scale:1 }} exit={{ opacity:0,y:-14 }}>
+        <motion.div className="toast-container" initial={{ opacity:0,y:14,scale:0.9 }} animate={{ opacity:1,y:0,scale:1 }} exit={{ opacity:0,y:14 }}>
           <div className="toast">{toast}</div>
         </motion.div>
       )}</AnimatePresence>
 
+      <AnimatePresence>
+        {isSidebarOpen && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.3 }}
+            onClick={() => setIsSidebarOpen(false)}
+            style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', zIndex: 9998 }}
+          />
+        )}
+      </AnimatePresence>
+
+      <SidebarLeft 
+        tab={tab} 
+        setTab={(newTab) => { setTab(newTab); setIsSidebarOpen(false); }} 
+        roadmapTrack={roadmapTrack} 
+        setRoadmapTrack={setRoadmapTrack} 
+        joinedRoadmaps={joinedRoadmaps}
+        switchRoadmap={(id) => { switchRoadmap(id); setIsSidebarOpen(false); }}
+        activeRoadmap={activeRoadmap}
+        isOpen={isSidebarOpen}
+        isHidden={tab === 'roadmap'}
+      />
+
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden', gridColumn: 2, gridRow: '1 / -1' }}>
+        <TopHeader 
+          tab={tab} 
+          onToggleSidebar={() => setIsSidebarOpen(prev => !prev)}
+          userProfile={userProfile}
+          toggleTheme={() => {
+            const nextTheme = userProfile.theme === 'light' ? 'dark' : 'light';
+            const up = { ...userProfile, theme: nextTheme };
+            setUserProfile(up);
+            persist({ userProfile: up });
+          }}
+          openProfileModal={() => setIsProfileModalOpen(true)}
+        />
+
       <div className="app-content">
-        <AnimatePresence mode="wait">
+        <AnimatePresence mode="popLayout">
         {/* ═══ ROADMAP VIEW ═══ */}
-        {roadmapTrack !== null ? (() => {
-          const tr = activeTracks[roadmapTrack];
-          if (!tr) { setRoadmapTrack(null); return null; }
+        {tab === "roadmap" ? (() => {
           const rmPrefix = activeRoadmap + ':';
-          const trackTasks = activeRaw.filter(r => r[2] === roadmapTrack);
-          const trackDone = trackTasks.filter(r => done[`${rmPrefix}${r[0]}-${r[1]}-${r[2]}`]).length;
-          const trackPct = trackTasks.length ? Math.round(trackDone / trackTasks.length * 100) : 0;
+          const totalTasks = activeRaw.length;
+          const totalDone = activeRaw.filter(r => done[`${rmPrefix}${r[0]}-${r[1]}-${r[2]}`]).length;
+          const totalPct = totalTasks ? Math.round(totalDone / totalTasks * 100) : 0;
           return (
-            <motion.div className="page" key="roadmap" {...fadeUp}>
-              <div className="detail-nav">
-                <button className="detail-back interactable" onClick={() => { haptic(); setRoadmapTrack(null); }}>
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--text)" strokeWidth="2" strokeLinecap="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+            <motion.div className="page" key="roadmap" {...fadeUp} style={{ padding: '24px 32px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                  <button 
+                    className="interactable"
+                    onClick={() => switchTab('discover')}
+                    style={{ background: 'var(--glass)', color: 'var(--text)', border: '1px solid var(--border)', padding: '8px 12px', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
+                  >
+                    <span style={{ fontSize: 16 }}>←</span> Back
+                  </button>
+                  <h2 style={{ fontSize: 24, fontWeight: 800 }}>{activeRoadmapDef.label} Roadmap</h2>
+                </div>
+                <button 
+                  className="interactable" 
+                  onClick={openCreate}
+                  style={{ background: 'var(--accent)', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
+                >
+                  + Add Task
                 </button>
-                <h2 style={{ fontSize: 18, fontWeight: 700 }}>{tr.label} Roadmap</h2>
-                <div style={{ width: 44 }} />
               </div>
 
-              <motion.div className="roadmap-hero" style={{ "--track-color": tr.color, "--track-bg": tr.bg }} {...scaleIn}>
-                <div className="roadmap-hero-icon">{tr.icon}</div>
-                <div className="roadmap-hero-title">{tr.label}</div>
-                <div className="roadmap-hero-sub">{tr.sublabel} · {trackDone}/{trackTasks.length} tasks</div>
-                <div className="pbar" style={{ marginTop: 16, height: 6 }}>
-                  <div className="pfill" style={{ width: `${trackPct}%`, background: tr.color }} />
-                </div>
-                <div style={{ fontSize: 12, color: "var(--sub)", marginTop: 8, textAlign: "right" }}>{trackPct}% complete</div>
-              </motion.div>
 
-              {Array.from({ length: maxWeeks }, (_, i) => {
-                const w = i + 1;
-                const weekTasks = DAYS.map((_, d) => (activePlan[w]?.[d] || []).find(t => t.track === roadmapTrack)).filter(Boolean);
-                const weekDone = weekTasks.filter(t => done[t.id]).length;
-                const isExp = expandedWeek === w;
-                return (
-                  <motion.div key={w} className="roadmap-week" {...scaleIn} transition={{ delay: i * 0.03 }}>
-                    <div className="roadmap-week-header interactable" onClick={() => { haptic(); setExpandedWeek(isExp ? null : w); setExpandedTopic(null); }}>
-                      <div className="roadmap-week-badge" style={{ background: weekDone === weekTasks.length && weekTasks.length > 0 ? "var(--green)" : isExp ? tr.color : "var(--card2)", color: weekDone === weekTasks.length || isExp ? "#0A0A0F" : "var(--sub)" }}>
-                        W{w}
+              <div style={{ display: 'flex', gap: 24, marginTop: 24 }}>
+                {/* ═══ NEW IN-WINDOW ROADMAP SUMMARY ═══ */}
+                <div style={{ width: 320, flexShrink: 0, background: 'var(--card)', borderRadius: 16, padding: 20, border: '1px solid var(--border)', alignSelf: 'flex-start' }}>
+                  <div style={{ fontSize: 13, color: 'var(--sub)', marginBottom: 16, lineHeight: 1.5 }}>
+                    {activeRoadmapDef?.description}
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                    <div style={{ background: 'var(--glass)', padding: 12, borderRadius: 8 }}>
+                      <div style={{ fontSize: 11, color: 'var(--sub)', marginBottom: 4 }}>Duration</div>
+                      <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)' }}>{activeRoadmapDef?.totalWeeks || 0} Weeks</div>
+                    </div>
+                    <div style={{ background: 'var(--glass)', padding: 12, borderRadius: 8 }}>
+                      <div style={{ fontSize: 11, color: 'var(--sub)', marginBottom: 4 }}>Commitment</div>
+                      <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)' }}>
+                        {activeRaw && activeRoadmapDef?.totalWeeks 
+                          ? Math.max(1, Math.round((activeRaw.reduce((acc, t) => acc + (parseInt(t[5]) || 2), 0)) / activeRoadmapDef.totalWeeks / 7)) 
+                          : 2} hrs / day
                       </div>
-                      <div style={{ flex: 1 }}>
-                        <div className="roadmap-week-title">Week {w} {w === week ? "· Current" : ""}</div>
-                        <div className="pbar" style={{ width: 100, marginTop: 4 }}>
-                          <div className="pfill" style={{ width: `${weekTasks.length ? weekDone/weekTasks.length*100 : 0}%`, background: tr.color }} />
+                    </div>
+                    <div style={{ background: 'var(--glass)', padding: 12, borderRadius: 8, gridColumn: 'span 2' }}>
+                      <div style={{ fontSize: 11, color: 'var(--sub)', marginBottom: 4 }}>Difficulty</div>
+                      <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)' }}>{activeRoadmapDef?.difficulty || 'All Levels'}</div>
+                    </div>
+                  </div>
+
+                  {activeRaw && activeRaw.length > 0 && (() => {
+                    const nicheStats = {};
+                    activeRaw.forEach(t => {
+                      const trackId = t[2];
+                      if (!nicheStats[trackId]) nicheStats[trackId] = { total: 0, done: 0 };
+                      nicheStats[trackId].total += 1;
+                      if (done[`${rmPrefix}${t[0]}-${t[1]}-${t[2]}`]) {
+                        nicheStats[trackId].done += 1;
+                      }
+                    });
+                    const total = activeRaw.length;
+                    const doneTotal = activeRaw.filter(t => done[`${rmPrefix}${t[0]}-${t[1]}-${t[2]}`]).length;
+                    
+                    let currentBgOffset = 0;
+                    const r = 36;
+                    const c = 2 * Math.PI * r;
+
+                    return (
+                      <div style={{ marginTop: 24 }}>
+                        <div style={{ fontSize: 11, color: 'var(--sub)', marginBottom: 16, textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>Topics Covered</div>
+                        <div style={{ display: 'flex', gap: 20, alignItems: 'center' }}>
+                          <div style={{ position: 'relative', width: 100, height: 100 }}>
+                            <svg width="100" height="100" viewBox="0 0 100 100" style={{ transform: 'rotate(-90deg)' }}>
+                              {Object.entries(nicheStats).map(([trackId, stats]) => {
+                                const trackDef = (activeTracks && activeTracks[trackId]) || (TRACKS && TRACKS[trackId]);
+                                if (!trackDef) return null;
+                                const pct = stats.total / total;
+                                const gap = 3;
+                                const dashArray = `${Math.max(0, (pct * c) - gap)} ${c}`;
+                                const dashOffset = -currentBgOffset;
+                                currentBgOffset += pct * c;
+                                return (
+                                  <circle 
+                                    key={`bg-${trackId}`}
+                                    cx="50" cy="50" r={r}
+                                    fill="transparent"
+                                    stroke="var(--glass-border)"
+                                    strokeWidth="8"
+                                    strokeDasharray={dashArray}
+                                    strokeDashoffset={dashOffset}
+                                  />
+                                )
+                              })}
+                              {(() => {
+                                let currentFgOffset = 0;
+                                return Object.entries(nicheStats).map(([trackId, stats]) => {
+                                  const trackDef = (activeTracks && activeTracks[trackId]) || (TRACKS && TRACKS[trackId]);
+                                  if (!trackDef) return null;
+                                  
+                                  const totalPct = stats.total / total;
+                                  const donePct = (stats.done / stats.total) * totalPct; 
+                                  const gap = 3;
+                                  
+                                  const dashArray = `${Math.max(0, (donePct * c) - gap)} ${c}`;
+                                  const dashOffset = -currentFgOffset;
+                                  currentFgOffset += totalPct * c;
+                                  
+                                  if (stats.done === 0) return null;
+                                  return (
+                                    <circle 
+                                      key={`fg-${trackId}`}
+                                      cx="50" cy="50" r={r}
+                                      fill="transparent"
+                                      stroke={trackDef.color || '#888'}
+                                      strokeWidth="8"
+                                      strokeDasharray={dashArray}
+                                      strokeDashoffset={dashOffset}
+                                      style={{ 
+                                        transition: 'stroke-dasharray 0.6s cubic-bezier(0.16, 1, 0.3, 1)', 
+                                        filter: `drop-shadow(0px 0px 6px ${trackDef.color})` 
+                                      }}
+                                    />
+                                  )
+                                });
+                              })()}
+                            </svg>
+                            <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column' }}>
+                              <span style={{ fontSize: 16, fontWeight: 800, color: 'var(--text)', lineHeight: 1 }}>{doneTotal}/{total}</span>
+                              <span style={{ fontSize: 9, color: 'var(--sub)', textTransform: 'uppercase', marginTop: 2 }}>Topics</span>
+                            </div>
+                          </div>
+                          
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, flex: 1 }}>
+                            {Object.entries(nicheStats).map(([trackId, stats]) => {
+                              const trackDef = (activeTracks && activeTracks[trackId]) || (TRACKS && TRACKS[trackId]);
+                              if (!trackDef) return null;
+                              return (
+                                <div key={trackId} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                    <div style={{ width: 8, height: 8, borderRadius: '50%', background: trackDef.color || '#888' }}></div>
+                                    <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{trackDef.label}</span>
+                                  </div>
+                                  <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--sub)' }}>
+                                    <span style={{ color: stats.done > 0 ? 'var(--text)' : 'inherit' }}>{stats.done}</span> / {stats.total}
+                                  </span>
+                                </div>
+                              );
+                            })}
+                          </div>
                         </div>
                       </div>
-                      <span className="roadmap-week-count">{weekDone}/{weekTasks.length}</span>
-                      <motion.span animate={{ rotate: isExp ? 90 : 0 }} style={{ color: "var(--sub)", fontSize: 20 }}>›</motion.span>
+                    );
+                  })()}
+
+                  {activeRoadmapDef?.tags && (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 16 }}>
+                      {activeRoadmapDef.tags.map(tag => (
+                        <span key={tag} style={{ background: 'var(--glass)', padding: '4px 10px', borderRadius: 12, fontSize: 11, color: 'var(--text-secondary)' }}>{tag}</span>
+                      ))}
                     </div>
-                    <AnimatePresence>
-                      {isExp && (
-                        <motion.div initial="collapsed" animate="expanded" exit="collapsed" variants={accordionVariants} style={{ overflow: "hidden" }}>
-                          <div className="roadmap-week-content">
-                            {weekTasks.map(task => (
-                              <TopicCard key={task.id} task={task} track={tr} isDone={!!done[task.id]}
-                                isExpanded={expandedTopic === task.id}
-                                onToggleExpand={() => { haptic(); setExpandedTopic(expandedTopic === task.id ? null : task.id); }}
-                                onToggleDone={() => toggle(task.id)}
-                                activeResources={activeResources} />
-                            ))}
-                          </div>
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
-                  </motion.div>
-                );
-              })}
+                  )}
+
+                  <button 
+                    onClick={() => joinedRoadmaps[activeRoadmap] ? leaveRoadmap(activeRoadmap) : joinRoadmap(activeRoadmap)} 
+                    style={{ width: '100%', marginTop: 24, padding: "12px 16px", background: joinedRoadmaps[activeRoadmap] ? "rgba(255, 50, 50, 0.2)" : "var(--accent)", color: joinedRoadmaps[activeRoadmap] ? "#ff8888" : "#fff", borderRadius: 8, border: "none", cursor: "pointer", fontWeight: 600, fontSize: 14 }}
+                  >
+                    {joinedRoadmaps[activeRoadmap] ? "Leave Roadmap" : "Join Roadmap"}
+                  </button>
+                </div>
+
+              <div style={{ flex: 1, height: 'calc(100vh - 120px)' }}>
+                <RoadmapInteractiveTree 
+                  activeRoadmapDef={activeRoadmapDef}
+                  activeRaw={combinedTasks}
+                  activeTracks={activeTracks}
+                  doneMap={done}
+                  onNodeClick={(task) => setDetailTask(task)}
+                  isJoined={!!joinedRoadmaps[activeRoadmap]}
+                />
+              </div>
+              </div>
             </motion.div>
           );
         })()
 
         /* ═══ HOME ═══ */
         : tab === "home" ? (
+          detailTask ? (
+            <TaskCenterView key="task-detail" detailTask={detailTask} TRACKS={TRACKS} activeTracks={activeTracks} activeResources={activeResources} RESOURCES={RESOURCES} closeDetail={() => setDetailTask(null)} fadeUp={fadeUp} doneMap={done} onToggleDone={toggle} />
+          ) : (
           <motion.div className="page" key="home" {...fadeUp}>
-            <div className="page-header">
-              <div>
-                <motion.p className="greeting-sub" initial={{ opacity:0 }} animate={{ opacity:1 }} transition={{ delay:0.1 }}>
-                  <ShinyText text={`${greeting} ${user} 👋`} speed={3} />
-                </motion.p>
-                <div className="greeting-main">
-                  <BlurText text="Manage Your Daily Tasks" delay={50} className="greeting-blur" />
-                </div>
-              </div>
-              <button className="week-badge interactable">Week {week}/{maxWeeks}</button>
-            </div>
-
             {/* ═══ ROADMAP SWITCHER ═══ */}
-            {joinedRoadmaps.length > 1 && (
-              <div className="roadmap-switcher" style={{ display: 'flex', gap: 8, marginBottom: 16, overflowX: 'auto', paddingBottom: 4 }}>
-                {joinedRoadmaps.map(rmId => {
-                  const rm = ROADMAPS.find(r => r.id === rmId);
-                  if (!rm) return null;
-                  const isActive = activeRoadmap === rmId;
-                  return (
-                    <motion.button key={rmId}
-                      className={`interactable`}
-                      onClick={() => { haptic(); switchRoadmap(rmId); }}
-                      whileTap={{ scale: 0.96 }}
-                      style={{
-                        padding: '10px 18px', borderRadius: 12, fontSize: 13, fontWeight: 600,
-                        border: `1.5px solid ${rm.color}`,
-                        background: isActive ? rm.color : 'transparent',
-                        color: isActive ? '#0A0A0F' : rm.color,
-                        cursor: 'pointer', transition: 'all 0.2s', whiteSpace: 'nowrap',
-                        display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0
-                      }}>
-                      <span>{rm.icon}</span> {rm.label}
-                    </motion.button>
-                  );
-                })}
+            <HomeRoadmapSwitcher
+              joinedRoadmaps={joinedRoadmaps}
+              activeRoadmap={activeRoadmap}
+              ROADMAPS={ROADMAPS}
+              switchRoadmap={(rmId) => {
+                setActiveRoadmap(rmId);
+                try {
+                  const localKey = `vtask_user_${user}`;
+                  const existing = JSON.parse(localStorage.getItem(localKey) || '{}');
+                  localStorage.setItem(localKey, JSON.stringify({ ...existing, activeRoadmap: rmId }));
+                } catch(e) {}
+                try { setDoc(doc(db, "users", user), { activeRoadmap: rmId }, { merge: true }); } catch(e) {};
+              }}
+              haptic={haptic}
+            />
+            
+            <div className="dashboard-v2-grid">
+              <div className="main-col">
+                <div className="dashboard-v2-panel" style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+                  <div className="panel-header">
+                    <h2>Today's Tasks</h2>
+                    <div className="panel-actions">
+                      <input type="text" className="search-input" placeholder="Search here..." />
+                      <button className="dash-btn" onClick={() => switchTab("calendar")}><span style={{fontSize: 14}}>📅</span> Schedule</button>
+                    </div>
+                  </div>
+                  <div style={{ flex: 1, overflowY: 'auto' }}>
+                    <table className="tasks-table">
+                      <thead>
+                        <tr>
+                          <th>Task Name</th>
+                          <th>Project</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {actualTodayTasks.length === 0 && <tr><td colSpan="3" style={{textAlign:'center', color:'var(--sub)'}}>No tasks for today.</td></tr>}
+                        {actualTodayTasks.map((task, idx) => {
+                          const tr = (activeTracks[task.track] || TRACKS[task.track] || TRACKS[0]);
+                          const isDone = !!done[task.id];
+                          return (
+                            <tr key={task.id} onClick={() => setDetailTask(task)} style={{ opacity: isDone ? 0.5 : 1 }}>
+                              <td>
+                                <div className="task-name-cell">
+                                  <div className="folder-icon" style={{ background: isDone ? 'var(--glass)' : `${tr.color}22`, color: isDone ? 'var(--sub)' : tr.color }}>{isDone ? '✅' : '📁'}</div>
+                                  <span style={{ textDecoration: isDone ? 'line-through' : 'none', fontWeight: 600, color: isDone ? 'var(--sub)' : 'var(--text)' }}>{task.topic}</span>
+                                </div>
+                              </td>
+                              <td>
+                                <div className="project-badge">
+                                  <div className="project-dot" style={{ background: tr.color }}></div>
+                                  {tr.label}
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
               </div>
-            )}
 
-            <div className="week-scroll">
-              {Array.from({ length: maxWeeks }, (_, i) => {
-                const w = i + 1, sel = w === week;
-                return (
-                  <button key={w} className={`week-pill interactable${sel ? " active" : ""}`}
-                    onClick={() => { haptic(); setWeek(w); }}>{w === week ? `W${w} ★` : `W${w}`}</button>
-                );
-              })}
-            </div>
-
-            <div className="track-scroll">
-              {activeTracks.filter(tr => assignedTracks.includes(tr.id)).map((tr, idx) => {
-                const rmPrefix = activeRoadmap + ':';
-                const allTr = activeRaw.filter(r => r[2] === tr.id);
-                const doneTr = allTr.filter(r => done[`${rmPrefix}${r[0]}-${r[1]}-${r[2]}`]).length;
-                return (
-                  <motion.div key={tr.id} initial={{ opacity:0,scale:0.9 }} animate={{ opacity:1,scale:1 }} transition={{ delay: idx*0.08 }}>
-                    <SpotlightCard className="track-card interactable" spotlightColor="rgba(255, 255, 255, 0.15)">
-                      <div onClick={() => { haptic("medium"); setRoadmapTrack(tr.id); setExpandedWeek(week); }} style={{ height: "100%" }}>
-                        <div className="track-icon">{tr.icon}</div>
-                        <div className="track-label" style={{ color: tr.color }}>{tr.label}</div>
-                        <div className="track-count">{doneTr}/{allTr.length} Tasks</div>
-                        <div className="pbar"><div className="pfill" style={{ width: `${allTr.length ? doneTr/allTr.length*100 : 0}%`, background: tr.color }} /></div>
-                      </div>
-                    </SpotlightCard>
-                  </motion.div>
-                );
-              })}
-            </div>
-
-            <div className="section-header"><h2>Ongoing</h2><button className="see-all interactable" onClick={() => switchTab("calendar")}>See All</button></div>
-            {todayTasks.map((task, idx) => {
-              const tr = (activeTracks[task.track] || TRACKS[task.track] || TRACKS[0]), isDone = !!done[task.id];
-              return (
-                <motion.div key={task.id} className={`task-card interactable${isDone ? " done" : ""}`}
-                  style={{ "--track-color": tr.color }} initial={{ opacity:0,y:16 }} animate={{ opacity:1,y:0 }} transition={{ delay:(idx+3)*0.05 }}
-                  onClick={() => setDetailTask(task)}>
-                  <div className="task-top">
-                    <span className="priority-badge" style={{ "--p-color": task.hrs >= 3 ? "#F87171" : "#FCD34D" }}>{task.hrs >= 3 ? "High" : "Medium"}</span>
+              <div className="side-col">
+                <div className="dashboard-v2-panel" style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+                  <div className="panel-header" style={{ marginBottom: 12 }}>
+                    <h2>Performance</h2>
                   </div>
-                  <div className="task-title" style={{ textDecoration: isDone ? "line-through" : "none" }}>{task.topic}</div>
-                  <div className="task-sub">{task.sub}</div>
-                  <div className="task-bottom">
-                    <span className="task-time">⏰ {tr.sublabel}</span>
-                    <div className="task-actions">
-                      <span className="chip" style={{ "--chip-color": tr.color, "--chip-bg": tr.bg }}>{tr.label}</span>
-                      <button className="check-btn interactable" onClick={e => toggle(task.id, e)}
-                        style={{ width:26,height:26,borderRadius:8,border:`2px solid ${tr.color}`,background:isDone?tr.color:"transparent",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0 }}>
-                        {isDone && <motion.svg width="12" height="10" viewBox="0 0 12 10" initial={{ scale:0 }} animate={{ scale:1 }}><path d="M1 5L4.5 8.5L11 1" stroke="#0A0A0F" strokeWidth="2.2" fill="none" strokeLinecap="round"/></motion.svg>}
-                      </button>
-                    </div>
+                  <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <Heatmap doneMap={done} onDateClick={(dateStr) => setSelectedActivityDate(dateStr)} />
                   </div>
-                  <div className="task-accent-line" style={{ background: tr.color }} />
-                </motion.div>
-              );
-            })}
-
-            {/* Upcoming */}
-            {upcomingTasks.length > 0 && <>
-              <div className="section-header" style={{ marginTop: 8 }}><h2>Upcoming</h2></div>
-              {upcomingTasks.slice(0,6).map((task, idx) => {
-                const tr = activeTracks[task.track] || TRACKS[task.track] || TRACKS[0];
-                return (
-                  <motion.div key={task.id+"-up"} className="upcoming-item" initial={{ opacity:0,x:-10 }} animate={{ opacity:1,x:0 }} transition={{ delay: idx*0.04 }}>
-                    <div className="upcoming-dot" style={{ background: tr.color }} />
-                    <div className="upcoming-info">
-                      <span className="upcoming-title">{task.topic}</span>
-                      <span className="upcoming-meta">{task.dayLabel} · W{task.week} · {task.sub}</span>
-                    </div>
-                    <span className="chip" style={{ "--chip-color": tr.color, "--chip-bg": tr.bg, fontSize: 10 }}>{tr.label}</span>
-                  </motion.div>
-                );
-              })}
-            </>}
-
-            <div className="overall-card">
-              <div className="overall-label">Overall Journey · {activeRoadmapDef.label}</div>
-              <div className="overall-row">
-                <div className="overall-pct"><ShinyText text={`${Math.round(totalPct * 100)}%`} speed={4} /></div>
-                <div className="overall-info">
-                  <div className="pbar" style={{ height: 6 }}><div className="pfill accent-gradient" style={{ width: `${totalPct*100}%` }} /></div>
-                  <span className="overall-sub">{totalDone} of {totalAll} tasks · Week {week}/{maxWeeks}</span>
                 </div>
               </div>
             </div>
 
-            {/* ═══ DISCOVER ROADMAPS ═══ */}
-            <div className="section-header" style={{ marginTop: 28 }}><h2>Discover Roadmaps</h2></div>
+            <div className="dashboard-v2-panel" style={{ marginTop: 24, marginBottom: 32 }}>
+              <div className="panel-header">
+                <h2>Live Projects</h2>
+                    <button className="dash-btn" onClick={() => {
+                      const name = prompt("Enter Project Name:");
+                      if (name) {
+                        const newProj = { id: Date.now().toString(), name, progress: 0, due: "TBD", owner: user || "You", color: ["#A78BFA", "#6EE7B7", "#60A5FA", "#F87171", "#FBBF24"][(liveProjects.length) % 5] };
+                        const updated = [...liveProjects, newProj];
+                        setLiveProjects(updated);
+                        const localKey = `vtask_user_${user}`;
+                        const existing = JSON.parse(localStorage.getItem(localKey) || '{}');
+                        localStorage.setItem(localKey, JSON.stringify({ ...existing, liveProjects: updated }));
+                        try { setDoc(doc(db, "users", user), { liveProjects: updated }, { merge: true }); } catch(e) {}
+                      }
+                    }}>+ Add Project</button>
+                  </div>
+                  <table className="tasks-table">
+                    <thead>
+                      <tr>
+                        <th>Project Name</th>
+                        <th>Progress</th>
+                        <th>Due Date</th>
+                        <th>Owner</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {liveProjects.length === 0 && <tr><td colSpan="4" style={{textAlign:'center', color:'var(--sub)'}}>No live projects. Add one!</td></tr>}
+                      {liveProjects.map(proj => (
+                        <tr key={proj.id} onClick={() => {
+                            const newProg = prompt("Enter new progress %:", proj.progress);
+                            if (newProg !== null && !isNaN(newProg)) {
+                                const updated = liveProjects.map(p => p.id === proj.id ? { ...p, progress: parseInt(newProg) } : p);
+                                setLiveProjects(updated);
+                                const localKey = `vtask_user_${user}`;
+                                const existing = JSON.parse(localStorage.getItem(localKey) || '{}');
+                                localStorage.setItem(localKey, JSON.stringify({ ...existing, liveProjects: updated }));
+                                try { setDoc(doc(db, "users", user), { liveProjects: updated }, { merge: true }); } catch(e) {}
+                            }
+                        }}>
+                          <td>
+                            <div className="task-name-cell">
+                              <div className="folder-icon" style={{ background: `${proj.color}22`, color: proj.color }}>📁</div>
+                              <span style={{ fontWeight: 600 }}>{proj.name}</span>
+                            </div>
+                          </td>
+                          <td>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                              <div className="pbar" style={{ width: 80, height: 6, background: 'var(--glass)', borderRadius: 3 }}>
+                                <div className="pfill" style={{ width: `${proj.progress}%`, background: proj.color, borderRadius: 3, height: '100%' }}></div>
+                              </div>
+                              <span style={{ fontSize: 12, color: 'var(--sub)' }}>{proj.progress}%</span>
+                            </div>
+                          </td>
+                          <td style={{ color: 'var(--sub)', fontSize: 12 }}>{proj.due}</td>
+                          <td style={{ color: 'var(--sub)', fontSize: 12 }}>{proj.owner}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+          {/* ═══ DISCOVER ROADMAPS ═══ */}
+          </motion.div>
+          )
+        )
+        : tab === 'discover' ? (
+            <motion.div className="tab-pane active" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} style={{ maxWidth: 900, margin: '0 auto', paddingBottom: 100 }}>
+              <div className="section-header" style={{ marginTop: 28 }}><h2>Discover Roadmaps</h2></div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 16 }}>
               {ROADMAPS.map((rm, idx) => {
-                const isJoined = joinedRoadmaps.includes(rm.id);
+                const isJoined = !!joinedRoadmaps[rm.id];
                 const isActive = activeRoadmap === rm.id;
                 const rmRaw = ALL_RAW[rm.id] || [];
                 const rmDone = rmRaw.filter(r => done[`${rm.id}:${r[0]}-${r[1]}-${r[2]}`]).length;
@@ -862,8 +1434,8 @@ function MainApp({ user, onLogout }) {
                       transition: 'all 0.3s cubic-bezier(0.16, 1, 0.3, 1)'
                     }}
                     onClick={() => {
-                      if (!isJoined) { joinRoadmap(rm.id); switchRoadmap(rm.id); }
-                      else { switchRoadmap(rm.id); }
+                      switchRoadmap(rm.id);
+                      switchTab("roadmap");
                     }}>
                     <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
                       <div style={{
@@ -910,108 +1482,17 @@ function MainApp({ user, onLogout }) {
           </motion.div>
         )
 
-        /* ═══ CALENDAR ═══ */
+        /* ═══ CALENDAR / GANTT ═══ */
         : tab === "calendar" ? (
-          <motion.div className="page" key="calendar" {...fadeUp}>
-            <div className="cal-header">
-              <div className="cal-title-row">
-                <h2 style={{ fontSize: 22, fontWeight: 800, letterSpacing: "-0.5px" }}>Schedule</h2>
-                <div style={{ fontSize: 13, color: "var(--sub)", background: "var(--card)", padding: "4px 10px", borderRadius: 12 }}>{wkDone}/{wkAll.length} this week</div>
-              </div>
-
-              {/* Week selector - always visible */}
-              <div className="week-scroll" style={{ marginTop: 16 }}>
-                {Array.from({ length: maxWeeks }, (_, i) => {
-                  const w = i + 1, sel = w === week;
-                  return <button key={w} className={`week-pill interactable${sel ? " active" : ""}`} onClick={() => { haptic(); setWeek(w); }}>{sel ? `W${w} ★` : `W${w}`}</button>;
-                })}
-              </div>
-
-              {/* Modern Day Selector */}
-              <div className="modern-day-scroll" style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 8, marginTop: 20, scrollbarWidth: "none", msOverflowStyle: "none" }}>
-                {DAYS.map((d, i) => {
-                  const pillDate = new Date(startDate);
-                  pillDate.setDate(pillDate.getDate() + (week - 1) * 7 + i);
-                  const dayOfWeek = pillDate.toLocaleDateString('en-US', { weekday: 'short' });
-                  const dateNum = pillDate.getDate();
-                  const isSel = i === selDay;
-                  const isToday = i === clampedToday && week === currentWeekIdx;
-                  return (
-                    <button key={d} onClick={() => { haptic(); setSelDay(i); }}
-                      className="interactable"
-                      style={{
-                        flex: "0 0 auto",
-                        minWidth: 64,
-                        padding: "12px 4px",
-                        borderRadius: 16,
-                        display: "flex", flexDirection: "column", alignItems: "center", gap: 6,
-                        background: isSel ? "var(--accent)" : "var(--card)",
-                        color: isSel ? "#fff" : "var(--text)",
-                        border: `1px solid ${isSel ? "var(--accent)" : isToday ? "var(--accent)" : "var(--border)"}`,
-                        transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
-                        boxShadow: isSel ? "0 8px 16px -4px rgba(99, 102, 241, 0.4)" : "none"
-                      }}>
-                      <span style={{ fontSize: 11, textTransform: "uppercase", fontWeight: 700, color: isSel ? "rgba(255,255,255,0.9)" : "var(--sub)", letterSpacing: "0.5px" }}>
-                        {d.includes('Review') ? 'REST' : dayOfWeek}
-                      </span>
-                      <span style={{ fontSize: 20, fontWeight: 800 }}>{dateNum}</span>
-                      {isToday && !isSel && <div style={{ width: 4, height: 4, borderRadius: "50%", background: "var(--accent)", marginTop: 2, position: "absolute", bottom: 6 }} />}
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
-
-            {/* Single day of current week */}
-            {DAYS.map((dayName, dayIdx) => {
-              if (dayIdx !== selDay) return null;
-              const dayTasks = (activePlan[week]?.[dayIdx] || []).filter(t => assignedTracks.includes(t.track));
-              const dayDone = dayTasks.filter(t => done[t.id]).length;
-              return (
-                <motion.div key={dayName} initial={{ opacity:0,y:12 }} animate={{ opacity:1,y:0 }} transition={{ delay: 0.05 }} style={{ marginBottom: 16 }}>
-                  <div className="timeline">
-                    <div className="timeline-line" />
-                    <div className="timeline-header">
-                      <div className="timeline-dot active" />
-                      <span className="timeline-day">{dayName}</span>
-                      <div className="timeline-date">{(() => { 
-                        const d = new Date(startDate); 
-                        d.setDate(d.getDate() + (week - 1) * 7 + dayIdx);
-                        return `${d.getDate()} ${MONTHS[d.getMonth()].substring(0,3)}`;
-                      })()}</div>
-                      <span style={{ fontSize: 12, color: dayDone === dayTasks.length && dayTasks.length > 0 ? "var(--green)" : "var(--sub)", marginLeft: "auto", fontWeight: 600 }}>{dayDone}/{dayTasks.length}{dayDone === dayTasks.length && dayTasks.length > 0 ? " ✓" : ""}</span>
-                    </div>
-                    {dayTasks.length === 0 ? (
-                      <div style={{ padding: "32px 20px", textAlign: "center", color: "var(--sub)", fontSize: 14, background: "var(--card)", borderRadius: 12, border: "1px dashed var(--border)", marginTop: 12 }}>
-                        No tasks scheduled for this day. Enjoy your rest! ☕
-                      </div>
-                    ) : dayTasks.map((task, idx) => {
-                      const tr = (activeTracks[task.track] || TRACKS[task.track] || TRACKS[0]), isDone = !!done[task.id];
-                      return (
-                        <div key={task.id}>
-                          <div className={`cal-task-card interactable${isDone ? " done" : ""}`}
-                            style={{ "--track-color": tr.color }} onClick={() => openDetail(task)}>
-                            <div className="cal-task-time" style={{ color: tr.color }}>{tr.sublabel}</div>
-                            <div className="cal-task-title" style={{ textDecoration: isDone ? "line-through" : "none" }}>{task.topic}</div>
-                            <div className="cal-task-sub">{task.sub}</div>
-                            <div className="cal-task-bottom">
-                              <span className="chip" style={{ "--chip-color": tr.color, "--chip-bg": tr.bg }}>{tr.label}</span>
-                              <button className="check-btn interactable" onClick={e => toggle(task.id, e)}
-                                style={{ width:24,height:24,borderRadius:7,border:`2px solid ${tr.color}`,background:isDone?tr.color:"transparent",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center" }}>
-                                {isDone && <svg width="10" height="8" viewBox="0 0 12 10"><path d="M1 5L4.5 8.5L11 1" stroke="#0A0A0F" strokeWidth="2" fill="none" strokeLinecap="round"/></svg>}
-                              </button>
-                            </div>
-                            <div className="task-accent-line" style={{ background: tr.color }} />
-                          </div>
-                          {idx < dayTasks.length - 1 && <div className="break-indicator"><div className="break-line"/><span className="break-text">Break</span><div className="break-line"/></div>}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </motion.div>
-              );
-            })}
-          </motion.div>
+          detailTask ? (
+            <TaskCenterView key="task-detail" detailTask={detailTask} TRACKS={TRACKS} activeTracks={activeTracks} activeResources={activeResources} RESOURCES={RESOURCES} closeDetail={() => setDetailTask(null)} fadeUp={fadeUp} doneMap={done} onToggleDone={toggle} />
+          ) : (
+          <GanttCalendar 
+            allTasks={combinedTasks} 
+            doneMap={done} 
+            onNodeClick={(task) => { setDetailTask(task); }} 
+          />
+          )
         )
 
         /* ═══ ALERTS ═══ */
@@ -1034,7 +1515,7 @@ function MainApp({ user, onLogout }) {
 
             <div className="notif-hero">
               <div className="notif-hero-title">Today's Schedule</div>
-              {todayTasks.map((task, idx) => {
+              {actualTodayTasks.map((task, idx) => {
                 const tr = (activeTracks[task.track] || TRACKS[task.track] || TRACKS[0]), isDone = !!done[task.id];
                 return (
                   <motion.div key={task.id} className="notif-item" initial={{ opacity:0,x:-8 }} animate={{ opacity:1,x:0 }} transition={{ delay: idx*0.06 }}>
@@ -1065,17 +1546,87 @@ function MainApp({ user, onLogout }) {
         )
 
         /* ═══ PROFILE ═══ */
-        : tab === "profile" ? (
+        : tab === "profile" ? (() => {
+          const wkAll = combinedTasks.filter(t => t.week === currentWeekIdx && assignedTracks.includes(t.track));
+          const wkDone = wkAll.filter(t => done[t.id]).length;
+          const todayDone = actualTodayTasks.filter(t => done[t.id]).length;
+          const totalAll = combinedTasks.filter(t => assignedTracks.includes(t.track)).length;
+          const totalDone = combinedTasks.filter(t => assignedTracks.includes(t.track) && done[t.id]).length;
+
+          return (
           <motion.div className="page" key="profile" {...fadeUp}>
             <div className="page-header"><h1 style={{ fontSize: 22 }}>Profile</h1></div>
+            
             <motion.div className="profile-hero" {...scaleIn}>
-              <div className="profile-avatar" style={{ textTransform: "uppercase" }}>{user[0] || "U"}</div>
-              <div className="profile-name">{user}</div>
+              <div className="profile-avatar" style={{ textTransform: "uppercase" }}>
+                {userProfile.avatar || userProfile.name?.[0] || "U"}
+              </div>
+              <div className="profile-name">{userProfile.name}</div>
               <div className="profile-role">FAANG Candidate</div>
             </motion.div>
+
+            <h3 className="section-title">Edit Profile</h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 24, padding: 16, background: 'var(--card)', borderRadius: 12, border: '1px solid var(--border)' }}>
+              <div>
+                <label style={{ fontSize: 12, color: 'var(--sub)', marginBottom: 4, display: 'block' }}>Display Name</label>
+                <input 
+                  type="text" 
+                  value={userProfile.name} 
+                  onChange={e => {
+                    const up = { ...userProfile, name: e.target.value };
+                    setUserProfile(up);
+                    persist({ userProfile: up });
+                  }}
+                  style={{ width: '100%', padding: '8px 12px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg2)', color: 'var(--text)' }}
+                />
+              </div>
+              <div>
+                <label style={{ fontSize: 12, color: 'var(--sub)', marginBottom: 4, display: 'block' }}>Email (for Notifications)</label>
+                <input 
+                  type="email" 
+                  value={userProfile.email} 
+                  onChange={e => {
+                    const up = { ...userProfile, email: e.target.value };
+                    setUserProfile(up);
+                    persist({ userProfile: up });
+                  }}
+                  placeholder="name@example.com"
+                  style={{ width: '100%', padding: '8px 12px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg2)', color: 'var(--text)' }}
+                />
+              </div>
+              <div>
+                <label style={{ fontSize: 12, color: 'var(--sub)', marginBottom: 4, display: 'block' }}>Avatar Emoji/URL</label>
+                <input 
+                  type="text" 
+                  value={userProfile.avatar} 
+                  onChange={e => {
+                    const up = { ...userProfile, avatar: e.target.value };
+                    setUserProfile(up);
+                    persist({ userProfile: up });
+                  }}
+                  placeholder="😎"
+                  style={{ width: '100%', padding: '8px 12px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg2)', color: 'var(--text)' }}
+                />
+              </div>
+              <div style={{ marginTop: 8 }}>
+                <button 
+                  onClick={() => {
+                    const nextTheme = userProfile.theme === 'light' ? 'dark' : 'light';
+                    const up = { ...userProfile, theme: nextTheme };
+                    setUserProfile(up);
+                    persist({ userProfile: up });
+                  }}
+                  className="interactable"
+                  style={{ background: 'var(--accent)', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: 8, cursor: 'pointer', fontWeight: 600 }}
+                >
+                  {userProfile.theme === 'light' ? '🌙 Switch to Dark Mode' : '☀️ Switch to Light Mode'}
+                </button>
+              </div>
+            </div>
+
             <h3 className="section-title">Statistics</h3>
             <div className="stats-grid">
-              {[{ label:"Completed",value:totalDone,icon:"✅",color:"var(--green)" },{ label:"Remaining",value:totalAll-totalDone,icon:"📋",color:"var(--yellow)" },{ label:"This Week",value:`${wkDone}/${wkAll.length}`,icon:"📅",color:"var(--purple)" },{ label:"Today",value:`${todayDone}/${todayTasks.length}`,icon:"☀️",color:"var(--accent)" }]
+              {[{ label:"Completed",value:totalDone,icon:"✅",color:"var(--green)" },{ label:"Remaining",value:totalAll-totalDone,icon:"📋",color:"var(--yellow)" },{ label:"This Week",value:`${wkDone}/${wkAll.length}`,icon:"📅",color:"var(--purple)" },{ label:"Today",value:`${todayDone}/${actualTodayTasks.length}`,icon:"☀️",color:"var(--accent)" }]
                 .map((s,i) => (
                   <motion.div key={s.label} className="stat-card interactable" initial={{ opacity:0,scale:0.9 }} animate={{ opacity:1,scale:1 }} transition={{ delay:i*0.06 }}>
                     <div className="stat-icon">{s.icon}</div><div className="stat-value" style={{ color:s.color }}>{s.value}</div><div className="stat-label">{s.label}</div>
@@ -1111,7 +1662,7 @@ function MainApp({ user, onLogout }) {
             <h3 className="section-title">My Roadmaps</h3>
             <div style={{ display: "flex", flexDirection: 'column', gap: 8, marginBottom: 16 }}>
               {ROADMAPS.map(rm => {
-                const isJoined = joinedRoadmaps.includes(rm.id);
+                const isJoined = !!joinedRoadmaps[rm.id];
                 return (
                   <div key={rm.id} className="menu-item interactable" onClick={() => {
                     haptic();
@@ -1146,236 +1697,141 @@ function MainApp({ user, onLogout }) {
               </div>
             </div>
             {[{ label:"All Tasks",icon:"📋",action:()=>switchTab("calendar") },
-              { label:"Reset Progress",icon:"🔄",action:()=>{setDone({});persist({});showToast("Progress reset");} },
+              { label:"Reset Progress",icon:"🔄",action:()=>{setDone({});persist({ progress: {} });showToast("Progress reset");} },
               { label:"Log Out",icon:"🚪",action:onLogout }
             ]
               .map(item => (
-                <div key={item.label} className="menu-item interactable" onClick={() => { haptic(); item.action?.(); }}>
+                  <div key={item.label} className="menu-item interactable" onClick={() => { haptic(); item.action?.(); }}>
                   <div className="menu-left"><span className="menu-icon">{item.icon}</span><span>{item.label}</span></div><span className="menu-arrow">›</span>
                 </div>
               ))}
           </motion.div>
-        ) : null}
+        );
+      })() : null}
         </AnimatePresence>
       </div>
+      </div>
 
-      {/* ═══ TASK DETAIL ═══ */}
       <AnimatePresence>
-        {detailTask && (() => {
-          const tr = (activeTracks[detailTask.track] || TRACKS[detailTask.track] || TRACKS[0]), isDone = !!done[detailTask.id];
-          const resources = (activeResources[detailTask.topic] || RESOURCES[detailTask.topic] || []);
-          
-          const getYoutubeId = (url) => {
-            const match = url?.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/);
-            return match ? match[1] : null;
-          };
-
-          const renderDescWithLinks = (text) => {
-            if (!text) return "";
-            const urlRegex = /(https?:\/\/[^\s]+)/g;
-            return text.split(urlRegex).map((part, i) => {
-              if (part.match(urlRegex)) {
-                const ytid = getYoutubeId(part);
-                if (ytid) {
-                  return (
-                    <a key={i} href={part} target="_blank" rel="noopener noreferrer" style={{ display: "block", marginTop: 8, marginBottom: 8, position: "relative", borderRadius: 12, overflow: "hidden", border: `1px solid ${tr.color}` }}>
-                      <img src={`https://img.youtube.com/vi/${ytid}/hqdefault.jpg`} style={{ width: "100%", height: 180, objectFit: "cover", opacity: 0.8 }} alt="Video Preview" />
-                      <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                        <div style={{ background: "rgba(220,38,38,0.9)", width: 48, height: 32, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                          <svg width="24" height="24" viewBox="0 0 24 24" fill="white"><path d="M8 5v14l11-7z"/></svg>
-                        </div>
-                      </div>
-                      <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, background: "linear-gradient(transparent, rgba(0,0,0,0.9))", padding: "10px 14px", color: "#fff", fontSize: 13, fontWeight: "500" }}>Watch Video</div>
-                    </a>
-                  );
-                }
-                return <a key={i} href={part} target="_blank" rel="noopener noreferrer" style={{ color: tr.color, textDecoration: "underline" }}>{part}</a>;
-              }
-              return <span key={i}>{part}</span>;
-            });
-          };
-
-          return (
-            <motion.div className="detail-overlay" key="detail" initial={{ opacity:0 }} animate={{ opacity:1 }} exit={{ opacity:0 }}>
-              <motion.div className="detail-page" {...slideRight}>
-                <div className="detail-nav">
-                  <button className="detail-back interactable" onClick={closeDetail}>
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--text)" strokeWidth="2" strokeLinecap="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
-                  </button>
-                  <button className={`detail-done-btn interactable${isDone?" completed":""}`} onClick={e => toggle(detailTask.id, e)}>
-                    {isDone ? "✓ Done" : "Mark Done"}
-                  </button>
-                </div>
-                <motion.div className="detail-hero" style={{ "--track-color": tr.color }} {...scaleIn}>
-                  <h1 className="detail-title">{detailTask.topic}</h1>
-                  <div className="detail-meta-grid">
-                    <div className="detail-meta"><span className="meta-label">Track</span><span className="meta-value" style={{ color:tr.color }}>{tr.label}</span></div>
-                    <div className="detail-meta"><span className="meta-label">Duration</span><span className="meta-value">{detailTask.hrs}h</span></div>
-                    <div className="detail-meta"><span className="meta-label">Difficulty</span><span className="priority-badge" style={{ "--p-color":detailTask.diff==="Hard"?"#F87171":detailTask.diff==="Medium"?"#FCD34D":"#6EE7B7",marginTop:4 }}>{detailTask.diff||"Medium"}</span></div>
-                    <div className="detail-meta"><span className="meta-label">Time</span><span className="meta-value">{tr.sublabel}</span></div>
-                    <div className="detail-meta"><span className="meta-label">Priority</span><span className="priority-badge" style={{ "--p-color":(detailTask.pri==="High"||detailTask.hrs>=3)?"#F87171":"#FCD34D",marginTop:4 }}>{detailTask.pri||(detailTask.hrs>=3?"High":"Medium")}</span></div>
-                  </div>
-                </motion.div>
-                <div className="detail-section"><h3 className="section-title">Description</h3>
-                  <div className="detail-desc-card" style={{ lineHeight: 1.5 }}>
-                    {typeof detailTask.desc === 'string' && detailTask.desc.includes('<div') ? (
-                       <div dangerouslySetInnerHTML={{ __html: detailTask.desc }} />
-                    ) : (
-                       renderDescWithLinks(detailTask.desc || `Focus on ${detailTask.sub} in the ${tr.label} track. ${detailTask.hrs}-hour deep work session. 💪`)
-                    )}
-                  </div>
-                </div>
-                {detailTask.probs && detailTask.probs.length > 0 && (
-                  <div className="detail-section"><h3 className="section-title">💻 Problems to Solve</h3>
-                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
-                      {detailTask.probs.map((p, i) => {
-                        const isUrl = p.startsWith("http");
-                        const href = isUrl ? p : `https://leetcode.com/problemset/all/?search=${encodeURIComponent(p.replace('LC ', ''))}`;
-                        return (
-                          <a key={i} href={href} target="_blank" rel="noopener noreferrer" style={{ textDecoration: "none" }}>
-                            <span className="chip interactable" style={{ cursor: "pointer", "--chip-color": tr.color, "--chip-bg": tr.bg, fontSize: 13, padding: "6px 14px" }}>
-                              {isUrl ? "Link 🔗" : p} ↗
-                            </span>
-                          </a>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-                {resources.length > 0 && (
-                  <div className="detail-section"><h3 className="section-title">📎 Resources</h3>
-                    <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 8 }}>
-                      {resources.map((url, i) => {
-                        let domain = "";
-                        try { domain = new URL(url).hostname.replace("www.",""); } catch(e){}
-                        const ytid = getYoutubeId(url);
-
-                        if (ytid) {
-                          return (
-                            <a key={i} href={url} target="_blank" rel="noopener noreferrer" className="video-preview-card interactable" style={{ position: "relative", display: "block", borderRadius: 12, overflow: "hidden", background: "#000", border: `1px solid ${tr.color}` }}>
-                              <img src={`https://img.youtube.com/vi/${ytid}/hqdefault.jpg`} style={{ width: "100%", height: 180, objectFit: "cover", opacity: 0.8 }} alt="Video Preview" />
-                              <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                                <div style={{ background: "rgba(220,38,38,0.9)", width: 48, height: 32, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                                  <svg width="24" height="24" viewBox="0 0 24 24" fill="white"><path d="M8 5v14l11-7z"/></svg>
-                                </div>
-                              </div>
-                              <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, background: "linear-gradient(transparent, rgba(0,0,0,0.9))", padding: "10px 14px", color: "#fff", fontSize: 13, fontWeight: "500" }}>Watch Video</div>
-                            </a>
-                          );
-                        }
-
-                        return (
-                          <a key={i} href={url} target="_blank" rel="noopener noreferrer" className="resource-link interactable" style={{ display: "flex", alignItems: "center", padding: "12px 16px", background: "var(--card2)", borderRadius: 10, textDecoration: "none", border: "1px solid var(--border)" }}>
-                            <span className="resource-icon" style={{ fontSize: 20, marginRight: 12 }}>{domain.includes("leetcode")?"💡":domain.includes("github")?"🐙":"🔗"}</span>
-                            <span className="resource-domain" style={{ color: "var(--text)", flex: 1, fontWeight: 500 }}>{domain || url}</span>
-                            <span className="resource-arrow" style={{ color: "var(--sub)" }}>↗</span>
-                          </a>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-              </motion.div>
-            </motion.div>
-          );
-        })()}
+      {showRightSidebar && (
+        <>
+          {isOverlayMode && (
+            <motion.div 
+              key="sidebar-overlay-bg"
+              initial={{ opacity: 0 }} 
+              animate={{ opacity: 1 }} 
+              exit={{ opacity: 0 }}
+              onClick={() => setDetailTask(null)}
+              style={{
+                position: 'fixed', inset: 0, zIndex: 40,
+                background: 'rgba(0,0,0,0.4)',
+                backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)'
+              }} 
+            />
+          )}
+          {!isOverlayMode && (
+            <div 
+              onMouseDown={startResize}
+              style={{
+                width: '5px',
+                cursor: 'col-resize',
+                background: 'transparent',
+                position: 'absolute',
+                right: computedRightWidth - 2,
+                top: 0,
+                bottom: 0,
+                zIndex: 100
+              }}
+            />
+          )}
+          <SidebarRight 
+            key="sidebar-right-panel"
+            detailTask={detailTask} 
+            closeDetail={() => setDetailTask(null)} 
+            activeTracks={activeTracks} 
+            TRACKS={TRACKS} 
+            done={done} 
+            activeResources={activeResources} 
+            RESOURCES={RESOURCES} 
+            activeRoadmapTitle={activeRoadmapDef.label}
+            tab={tab}
+            isJoined={!!joinedRoadmaps[activeRoadmap]}
+            activeRaw={combinedTasks}
+            activeRoadmapDef={activeRoadmapDef}
+            joinRoadmap={() => joinRoadmap(activeRoadmap)}
+            leaveRoadmap={() => leaveRoadmap(activeRoadmap)}
+            toggleTaskDone={toggle}
+            isOverlayMode={isOverlayMode}
+            actualTodayTasks={actualTodayTasks}
+            incompletePastTasks={incompletePastTasks}
+            selectedActivityDate={selectedActivityDate}
+            setSelectedActivityDate={setSelectedActivityDate}
+            onOpenTaskModal={() => setIsTaskModalOpen(true)}
+            onOpenMeetingModal={() => setIsMeetingModalOpen(true)}
+            meetings={meetings}
+          />
+        </>
+      )}
       </AnimatePresence>
-
-      {/* ═══ CREATE MODAL ═══ */}
-      <AnimatePresence>
-        {showCreate && (
-          <motion.div className="modal-overlay" initial={{ opacity:0 }} animate={{ opacity:1 }} exit={{ opacity:0 }} onClick={closeCreate}>
-            <motion.div className="modal" initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }} transition={{ type: "spring", stiffness: 280, damping: 28 }} onClick={e => e.stopPropagation()} style={{ maxHeight: '90vh', overflowY: 'auto' }}>
-              <div className="modal-header"><h2>Create New Task</h2><button className="modal-close interactable" onClick={closeCreate}>✕</button></div>
-              <div className="form-group"><label>Task Name</label><input className="input-field" placeholder="Enter task name..." value={newTask.name} onChange={e => setNewTask({ ...newTask, name: e.target.value })} /></div>
-              <div className="form-group"><label>Description</label><textarea className="input-field" placeholder="Add description..." value={newTask.desc} onChange={e => setNewTask({ ...newTask, desc: e.target.value })} /></div>
-              
-              <div className="modal-row" style={{ display:'flex', gap:10 }}>
-                <div className="form-group" style={{ flex:1 }}><label>Week</label>
-                  <select className="input-field" value={newTask.week} onChange={e => setNewTask({ ...newTask, week: parseInt(e.target.value) })}>
-                    {[...Array(maxWeeks)].map((_, i) => <option key={i+1} value={i+1}>Week {i+1}</option>)}
-                  </select>
-                </div>
-                <div className="form-group" style={{ flex:1 }}><label>Day</label>
-                  <select className="input-field" value={newTask.day} onChange={e => setNewTask({ ...newTask, day: parseInt(e.target.value) })}>
-                    {DAYS.map((d, i) => <option key={i} value={i}>{d}</option>)}
-                  </select>
-                </div>
-              </div>
-
-              <div className="form-group"><label>Track (Category)</label>
-                <div className="priority-row" style={{ flexWrap: 'wrap' }}>{activeTracks.map(tr => (
-                  <button key={tr.id} className={`priority-option interactable${newTask.track === tr.id ? " active" : ""}`} style={{ "--p-color": tr.color, flex: '1 1 30%', fontSize:11 }}
-                    onClick={() => setNewTask({ ...newTask, track: tr.id })}>{tr.label}</button>
-                ))}</div>
-              </div>
-
-              <div className="form-group"><label>Priority</label>
-                <div className="priority-row">{["Low", "Medium", "High"].map(p => (
-                  <button key={p} className={`priority-option interactable${newTask.priority === p ? " active" : ""}`} style={{ "--p-color": { Low: "#6EE7B7", Medium: "#FCD34D", High: "#F87171" }[p] }}
-                    onClick={() => setNewTask({ ...newTask, priority: p })}>{p}</button>
-                ))}</div>
-              </div>
-
-              <button className="create-btn interactable" onClick={() => { 
-                if (!newTask.name) return showToast("Please enter a task name!");
-                haptic("heavy");
-                
-                const id = `custom-${Date.now()}`;
-                const taskObj = { 
-                  id, 
-                  week: newTask.week, 
-                  day: newTask.day, 
-                  track: newTask.track, 
-                  topic: newTask.name, 
-                  sub: newTask.desc || "Custom Task", 
-                  hrs: newTask.priority === "High" ? 4 : 2,
-                  pri: newTask.priority,
-                  diff: "Medium",
-                  desc: newTask.desc || "Manually added task.",
-                  probs: [], res: []
-                };
-                
-                const updatedCustom = [...customTasks, taskObj];
-                setCustomTasks(updatedCustom);
-                // Save to both localStorage and Firebase
-                try {
-                  const localKey = `vtask_user_${user}`;
-                  const existing = JSON.parse(localStorage.getItem(localKey) || '{}');
-                  localStorage.setItem(localKey, JSON.stringify({ ...existing, customTasks: updatedCustom }));
-                } catch(e) {}
-                try { setDoc(doc(db, "users", user), { customTasks: updatedCustom }, { merge: true }); } catch(e) {}
-
-                showToast("Task created & synced! ✨"); 
-                closeCreate(); 
-                setNewTask({ name: "", desc: "", priority: "Medium", track: 0, week: week, day: selDay });
-              }}>Create Task</button>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      <button className="fab interactable" onClick={() => { haptic("heavy"); openCreate(); }}>
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="#0A0A0F" strokeWidth="2.5" strokeLinecap="round"/></svg>
-      </button>
 
       <nav className="bottom-nav">
-        {navItems.map(item => {
-          if (item.id === "spacer") return <div key="spacer" className="nav-spacer" />;
-          const active = tab === item.id && !roadmapTrack;
-          return (
-            <button key={item.id} className={`nav-btn interactable${active ? " active" : ""}`} onClick={() => switchTab(item.id)}>
-              <svg viewBox="0 0 24 24" fill="none" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d={item.path} /></svg>
-              <span>{item.label}</span>
-              {active && (
-                <div className="nav-indicator-wrapper">
-                  <motion.div className="nav-indicator" layoutId="navIndicator" />
-                </div>
-              )}
-            </button>
-          );
-        })}
+        <GradientButtonGroupBottom
+          navItems={navItems}
+          activeTab={tab}
+          onTabChange={switchTab}
+          onCreate={openCreate}
+        />
       </nav>
+
+      {isProfileModalOpen && (
+        <ProfileModal 
+          userProfile={userProfile} 
+          onClose={() => setIsProfileModalOpen(false)} 
+          onSave={(newProfile) => {
+            const up = { ...userProfile, ...newProfile };
+            setUserProfile(up);
+            persist({ userProfile: up });
+            setIsProfileModalOpen(false);
+          }} 
+        />
+      )}
+
+      {isTaskModalOpen && (
+        <TaskModal
+          onClose={() => setIsTaskModalOpen(false)}
+          onSave={(taskData) => {
+            const newTask = {
+              id: `custom_${Date.now()}`,
+              topic: taskData.name,
+              track: parseInt(taskData.track) || 0,
+              week: parseInt(taskData.week) || currentWeekIdx,
+              day: parseInt(taskData.day) || rawDay,
+              duration: taskData.duration,
+              desc: taskData.desc,
+              isCustom: true,
+              rmId: activeRoadmap
+            };
+            const updated = [...customTasks, newTask];
+            setCustomTasks(updated);
+            persist({ customTasks: updated });
+            setIsTaskModalOpen(false);
+          }}
+          TRACKS={TRACKS}
+          activeTracks={activeTracks}
+        />
+      )}
+
+      {isMeetingModalOpen && (
+        <MeetingModal
+          onClose={() => setIsMeetingModalOpen(false)}
+          onSave={(meetingData) => {
+            const updated = [...meetings, meetingData].sort((a, b) => new Date(`${a.date}T${a.time}`) - new Date(`${b.date}T${b.time}`));
+            setMeetings(updated);
+            persist({ meetings: updated });
+            setIsMeetingModalOpen(false);
+          }}
+        />
+      )}
     </div>
   );
 }

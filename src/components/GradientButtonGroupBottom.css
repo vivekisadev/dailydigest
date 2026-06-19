@@ -1,0 +1,195 @@
+/* ═══════════════════════════════════════════════════════════
+   GRADIENT BUTTON GROUP NAVIGATION CSS
+   ═══════════════════════════════════════════════════════════ */
+
+:root {
+  --nav-teal: #06b6d4;
+  --nav-purple: #8b5cf6;
+  --nav-accent-gradient: linear-gradient(135deg, var(--nav-teal) 0%, var(--nav-purple) 100%);
+}
+
+.gbg-nav-container {
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  width: 100%;
+  position: relative;
+  background: rgba(10, 10, 16, 0.75);
+  backdrop-filter: blur(28px) saturate(180%);
+  -webkit-backdrop-filter: blur(28px) saturate(180%);
+  border-top: 1.5px solid rgba(255, 255, 255, 0.06);
+  padding: 8px 12px calc(8px + env(safe-area-inset-bottom));
+  box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.5), 
+              inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+/* Individual Tab Button */
+.gbg-btn {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 10px 4px;
+  border-radius: var(--radius-lg, 16px);
+  position: relative;
+  color: var(--muted, #52525b);
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  -webkit-tap-highlight-color: transparent;
+  max-width: 70px;
+}
+
+.gbg-btn svg {
+  width: 22px;
+  height: 22px;
+  stroke: var(--text-secondary, #b0b0c0);
+  opacity: 0.65;
+  transition: all 0.3s var(--ease-out);
+}
+
+.gbg-btn span {
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  opacity: 0.7;
+  transition: all 0.3s var(--ease-out);
+}
+
+/* Glowing Outline Active State */
+.gbg-btn.active {
+  color: #ffffff;
+}
+
+.gbg-btn.active svg {
+  stroke: #ffffff;
+  opacity: 1;
+}
+
+.gbg-btn.active span {
+  font-weight: 700;
+  color: #ffffff;
+  opacity: 1;
+}
+
+/* Elegant flowing gradient border overlay on active */
+.gbg-btn.active::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1.5px;
+  background: var(--nav-accent-gradient);
+  -webkit-mask: 
+     linear-gradient(#fff 0 0) content-box, 
+     linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+          mask-composite: exclude;
+  pointer-events: none;
+  opacity: 0.9;
+  animation: rotateGradient 6s linear infinite;
+}
+
+/* Outer Glow shadow */
+.gbg-btn.active::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--nav-accent-gradient);
+  filter: blur(8px);
+  opacity: 0.25;
+  border-radius: inherit;
+  z-index: -1;
+  pointer-events: none;
+}
+
+/* Ambient glow under active button */
+.gbg-btn-glow {
+  position: absolute;
+  inset: 4px;
+  background: radial-gradient(circle, rgba(99, 102, 241, 0.15) 0%, transparent 70%);
+  opacity: 0;
+  transition: opacity 0.3s var(--ease-out);
+  pointer-events: none;
+  z-index: -1;
+}
+
+.gbg-btn.active .gbg-btn-glow {
+  opacity: 1;
+}
+
+/* Hover Micro-interactions */
+.gbg-btn:hover:not(.active) svg {
+  opacity: 0.9;
+  transform: translateY(-2px);
+}
+
+.gbg-btn:active {
+  transform: scale(0.92);
+}
+
+/* Create Button (+) */
+.gbg-create-btn {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: var(--nav-accent-gradient);
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  position: relative;
+  box-shadow: 0 4px 20px rgba(99, 102, 241, 0.4), 
+              inset 0 1px 0 rgba(255, 255, 255, 0.25);
+  margin-top: -16px; /* Let it sit slightly raised */
+  transition: all 0.3s var(--ease-spring);
+  -webkit-tap-highlight-color: transparent;
+  z-index: 10;
+}
+
+.gbg-create-btn::after {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border-radius: 50%;
+  background: var(--nav-accent-gradient);
+  opacity: 0.35;
+  filter: blur(6px);
+  z-index: -1;
+  transition: opacity 0.3s var(--ease-out);
+}
+
+/* Hover and Active state on Create Button */
+.gbg-create-btn:hover {
+  transform: translateY(-2px) scale(1.06);
+  box-shadow: 0 6px 24px rgba(99, 102, 241, 0.5), 
+              inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+
+.gbg-create-btn:hover::after {
+  opacity: 0.5;
+}
+
+.gbg-create-btn:active {
+  transform: translateY(1px) scale(0.92) rotate(90deg);
+}
+
+/* Subtle pulse animation for create button to feel premium */
+@keyframes pulseCreate {
+  0%, 100% {
+    box-shadow: 0 4px 20px rgba(99, 102, 241, 0.4), 
+                inset 0 1px 0 rgba(255, 255, 255, 0.25);
+  }
+  50% {
+    box-shadow: 0 4px 28px rgba(99, 102, 241, 0.6), 
+                inset 0 1px 0 rgba(255, 255, 255, 0.35);
+  }
+}
+
+.gbg-create-btn {
+  animation: pulseCreate 3s ease-in-out infinite;
+}
