@@ -259,6 +259,10 @@ body::after {
   0%, 100% { opacity: 0.4; }
   50% { opacity: 0.8; }
 }
+@keyframes loadingBar {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(200%); }
+}
 
 /* ═══ DASHBOARD V2 REDESIGN ═══ */
 .dashboard-v2-grid {

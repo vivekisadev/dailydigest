@@ -775,9 +775,67 @@ const HomeRoadmapSwitcher = ({ joinedRoadmaps, activeRoadmap, ROADMAPS, switchRo
 
 /* ═══ ROADMAP APP WRAPPER ═══ */
 export default function App() {
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    // Simulate loading time for the preloader
+    const timer = setTimeout(() => {
+      setLoading(false);
+    }, 2000);
+    return () => clearTimeout(timer);
+  }, []);
+
   const [user, setUser] = useState(() => {
     try { return localStorage.getItem("vtask_logged_in_user") || null; } catch(e) { return null; }
   });
+
+  if (loading) {
+    return (
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        height: '100vh',
+        width: '100vw',
+        background: 'var(--bg)',
+        flexDirection: 'column',
+        gap: '20px'
+      }}>
+        <div style={{
+          fontSize: '48px',
+          fontWeight: 900,
+          background: 'linear-gradient(90deg, #fff, #a78bfa, #3b82f6, #fff)',
+          backgroundSize: '300% 100%',
+          WebkitBackgroundClip: 'text',
+          WebkitTextFillColor: 'transparent',
+          animation: 'shimmer 2s infinite linear, pulse 2s infinite ease-in-out',
+          letterSpacing: '-1px'
+        }}>
+          GuideMe
+        </div>
+        <div style={{
+          width: '40px',
+          height: '4px',
+          background: 'var(--glass)',
+          borderRadius: '4px',
+          overflow: 'hidden',
+          position: 'relative'
+        }}>
+           <div style={{
+             position: 'absolute',
+             top: 0,
+             left: 0,
+             height: '100%',
+             width: '50%',
+             background: 'var(--accent)',
+             borderRadius: '4px',
+             animation: 'loadingBar 1s infinite ease-in-out alternate'
+           }} />
+        </div>
+      </div>
+    );
+  }
+
   if (!user) {
     return <LoginScreen onLogin={(u) => {
       localStorage.setItem("vtask_logged_in_user", u);

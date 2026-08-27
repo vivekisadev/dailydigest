@@ -18,6 +18,20 @@ export default function TopHeader({ tab, onToggleSidebar, userProfile, toggleThe
             )}
           </button>
         )}
+        
+        <div className="guideme-logo" style={{ 
+          fontSize: '22px', 
+          fontWeight: 800, 
+          marginRight: '12px',
+          background: 'linear-gradient(90deg, #fff, #a78bfa, #3b82f6, #fff)',
+          backgroundSize: '300% 100%',
+          WebkitBackgroundClip: 'text',
+          WebkitTextFillColor: 'transparent',
+          animation: 'shimmer 3s infinite linear'
+        }}>
+          GuideMe
+        </div>
+
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, width: '400px', background: 'var(--glass)', borderRadius: 8, padding: '8px 16px', border: '1px solid var(--border)' }}>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--sub)" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.3-4.3"/></svg>
           <input type="text" placeholder="Search (⌘ + S)" style={{ background: 'transparent', border: 'none', color: 'var(--text)', fontSize: 13, outline: 'none', width: '100%' }} />
