@@ -7,9 +7,15 @@ export default function TopHeader({ tab, onToggleSidebar, userProfile, toggleThe
         {tab === 'roadmap' && (
           <button 
             onClick={onToggleSidebar}
-            style={{ background: 'var(--glass)', border: '1px solid var(--border)', color: 'var(--text)', borderRadius: 8, width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+            style={{ background: 'transparent', border: 'none', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
           >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg>
+            {userProfile?.avatar && userProfile.avatar.startsWith('http') ? (
+              <img src={userProfile.avatar} style={{ width: 36, height: 36, borderRadius: '50%', objectFit: 'cover' }} alt="profile" />
+            ) : (
+              <div style={{ width: 36, height: 36, borderRadius: '50%', background: 'var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 16 }}>
+                {userProfile?.avatar || userProfile?.name?.[0] || 'U'}
+              </div>
+            )}
           </button>
         )}
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, width: '400px', background: 'var(--glass)', borderRadius: 8, padding: '8px 16px', border: '1px solid var(--border)' }}>
@@ -31,19 +37,7 @@ export default function TopHeader({ tab, onToggleSidebar, userProfile, toggleThe
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
           <div style={{ position: 'absolute', top: -2, right: -2, width: 8, height: 8, background: 'var(--yellow)', borderRadius: '50%' }}></div>
         </button>
-        <div onClick={openProfileModal} style={{ display: 'flex', alignItems: 'center', gap: 12, marginLeft: 8, cursor: 'pointer' }}>
-          {userProfile?.avatar && userProfile.avatar.startsWith('http') ? (
-            <img src={userProfile.avatar} style={{ width: 32, height: 32, borderRadius: '50%', objectFit: 'cover' }} alt="profile" />
-          ) : (
-            <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 14 }}>
-              {userProfile?.avatar || userProfile?.name?.[0] || 'U'}
-            </div>
-          )}
-          <div style={{ display: 'flex', flexDirection: 'column' }}>
-            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{userProfile?.name || 'User'}</span>
-            <span style={{ fontSize: 11, color: 'var(--sub)' }}>{userProfile?.email || 'Set your email'}</span>
-          </div>
-        </div>
+
       </div>
     </div>
   );

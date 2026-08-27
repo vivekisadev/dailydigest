@@ -13,15 +13,15 @@ export const RESOURCES = FAANG_RESOURCES;
 export const ROADMAPS = [
   {
     id: "faang-90",
-    label: "90-Day FAANG Prep",
-    description: "Master DSA, System Design, and ace top-tier tech interviews in 90 days.",
+    label: "90-Day MANGO Prep",
+    description: "Master DSA, System Design, and ace top-tier tech interviews at MANGO (Meta, Anthropic, Google, OpenAI, X, Tesla, SpaceX) in 90 days.",
     icon: "🚀",
     color: "#A78BFA",
     gradient: "linear-gradient(135deg, #A78BFA 0%, #6366F1 100%)",
     totalWeeks: 15,
     totalDays: 90,
     difficulty: "Advanced",
-    tags: ["DSA", "System Design", "Behavioral", "FAANG"],
+    tags: ["DSA", "System Design", "Behavioral", "MANGO"],
   },
   {
     id: "cs-fundamentals-45",
@@ -71,6 +71,19 @@ export const ROADMAPS = [
     difficulty: "Advanced",
     tags: ["DSA", "LeetCode", "Algorithms"],
     tieredByTrack: true
+  },
+  {
+    id: "data-analyst-roadmap",
+    label: "Data Analyst Roadmap",
+    description: "Master SQL, Python, Tableau, and Statistics to become a top-tier Data Analyst.",
+    icon: "📊",
+    color: "#FBBF24",
+    gradient: "linear-gradient(135deg, #FBBF24 0%, #D97706 100%)",
+    totalWeeks: 12,
+    totalDays: 84,
+    difficulty: "Beginner to Pro",
+    tags: ["Data", "SQL", "Python", "Tableau"],
+    isComingSoon: true
   }
 ];
 

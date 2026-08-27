@@ -19,10 +19,12 @@ const RootNode = ({ data }) => (
 );
 
 const WeekNode = ({ data }) => (
-  <div className="interactable" onClick={() => data.onClick(data.task)} style={{ width: 120, height: 42, background: '#eab308', border: '1.5px solid #ca8a04', borderRadius: 8, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
-    <Handle type="target" position={Position.Top} style={{ top: '50%', left: '50%', transform: 'translate(-50%, -50%)', opacity: 0 }} />
+  <div className="interactable" onClick={() => data.onClick(data.task)} style={{ width: 120, height: 42, background: '#eab308', border: '1.5px solid #ca8a04', borderRadius: 8, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', zIndex: 10 }}>
+    <Handle type="target" id="top" position={Position.Top} style={{ opacity: 0 }} />
+    <Handle type="target" id="left" position={Position.Left} style={{ opacity: 0 }} />
+    <Handle type="target" id="right" position={Position.Right} style={{ opacity: 0 }} />
     <span style={{ color: '#000000', fontFamily: 'sans-serif', fontSize: 13, fontWeight: 700 }}>{data.title}</span>
-    <Handle type="source" position={Position.Bottom} style={{ top: '50%', left: '50%', transform: 'translate(-50%, -50%)', opacity: 0 }} />
+    <Handle type="source" id="bottom" position={Position.Bottom} style={{ opacity: 0 }} />
   </div>
 );
 
@@ -67,12 +69,61 @@ const BackNode = ({ data }) => (
   </div>
 );
 
+// --- MIND-MAP NODES (HORIZONTAL) ---
+const MMWeekNode = ({ data }) => (
+  <div style={{ width: 140, height: 48, background: '#f59e0b', border: '2px solid #d97706', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 20px rgba(245, 158, 11, 0.2)' }}>
+    <Handle type="target" id="t-left" position={Position.Left} style={{ opacity: 0 }} />
+    <Handle type="source" id="left" position={Position.Left} style={{ top: '50%', left: -8, width: 8, height: 8, background: '#d97706', border: 'none' }} />
+    <span style={{ color: '#000000', fontFamily: 'sans-serif', fontSize: 16, fontWeight: 800 }}>{data.title}</span>
+    <Handle type="target" id="t-right" position={Position.Right} style={{ opacity: 0 }} />
+    <Handle type="source" id="right" position={Position.Right} style={{ top: '50%', right: -8, width: 8, height: 8, background: '#d97706', border: 'none' }} />
+  </div>
+);
+
+const MMTrackNode = ({ data }) => (
+  <div style={{ width: 180, height: 40, background: data.color || '#fcd34d', border: `2px solid ${data.color || '#fbbf24'}`, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 15px rgba(0, 0, 0, 0.15)' }}>
+    <Handle type="source" id="left" position={Position.Left} style={{ top: '50%', left: -8, width: 8, height: 8, background: data.color || '#fbbf24', border: 'none' }} />
+    <span style={{ color: '#000000', fontFamily: 'sans-serif', fontSize: 13, fontWeight: 700 }}>{data.title}</span>
+    <Handle type="source" id="right" position={Position.Right} style={{ top: '50%', right: -8, width: 8, height: 8, background: data.color || '#fbbf24', border: 'none' }} />
+  </div>
+);
+
+const MMTopicNode = ({ data }) => {
+  const isDone = data.isJoined && data.isDone;
+  const bgColor = isDone ? '#34d399' : '#a7f3d0';
+  const strokeColor = isDone ? '#10b981' : '#6ee7b7';
+  
+  return (
+    <div 
+      className="interactable"
+      onClick={() => data.onClick(data.task)}
+      style={{ 
+        width: 220, minHeight: 38, background: bgColor, 
+        border: `2px solid ${strokeColor}`, 
+        borderRadius: 8, display: 'flex', alignItems: 'center', padding: '8px 12px',
+        cursor: 'pointer', position: 'relative',
+        boxShadow: `0 4px 15px rgba(52, 211, 153, ${isDone ? 0.3 : 0.1})`
+      }}
+    >
+      <Handle type="target" id="left" position={Position.Left} style={{ top: '50%', left: -8, width: 8, height: 8, background: strokeColor, border: 'none' }} />
+      <span style={{ color: '#064e3b', fontFamily: 'sans-serif', fontSize: 12, fontWeight: 600, lineHeight: 1.3 }}>{data.title}</span>
+      {isDone && (
+        <span style={{ position: 'absolute', right: -6, top: -6, background: '#059669', color: '#fff', borderRadius: '50%', width: 18, height: 18, fontSize: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>✓</span>
+      )}
+      <Handle type="target" id="right" position={Position.Right} style={{ top: '50%', right: -8, width: 8, height: 8, background: strokeColor, border: 'none' }} />
+    </div>
+  );
+};
+
 const nodeTypes = {
   root: RootNode,
   week: WeekNode,
   topic: TopicNode,
   niche: NicheNode,
-  back: BackNode
+  back: BackNode,
+  'mm-week': MMWeekNode,
+  'mm-track': MMTrackNode,
+  'mm-topic': MMTopicNode
 };
 
 // --- CUSTOM SCROLLBAR OVERLAY ---
@@ -175,17 +226,22 @@ export default function RoadmapInteractiveTree({ activeRoadmapDef, activeRaw, ac
           prevNodeId = trackId;
         });
       } else {
-        // OVERVIEW: WEEKS
+        // OVERVIEW: WEEKS (SNAKE LAYOUT)
         let maxWeek = 0;
         activeRaw.forEach(t => { if (t[0] > maxWeek) maxWeek = t[0]; });
         const totalWeeks = Math.max(activeRoadmapDef?.totalWeeks || maxWeek, maxWeek);
 
         for (let w = 1; w <= totalWeeks; w++) {
           const weekId = `week-${w}`;
+          
+          // Alternating positions for snake layout
+          const isLeft = (w % 2 !== 0);
+          const xPos = isLeft ? CENTER_X - 160 : CENTER_X + 40;
+
           nds.push({
             id: weekId,
             type: 'week',
-            position: { x: CENTER_X - 60, y: currentY },
+            position: { x: xPos, y: currentY },
             data: { 
               title: `Week ${w}`,
               task: { type: 'week', value: w },
@@ -193,30 +249,36 @@ export default function RoadmapInteractiveTree({ activeRoadmapDef, activeRaw, ac
             }
           });
 
+          let targetHandle = 'top';
+          if (w > 1) {
+            targetHandle = isLeft ? 'right' : 'left';
+          }
+
           eds.push({
             id: `e-${edgeIdCounter++}`,
             source: prevNodeId,
+            sourceHandle: prevNodeId === rootId ? undefined : 'bottom',
             target: weekId,
-            type: 'straight',
-            style: { stroke: "#ca8a04", strokeWidth: 2 }
+            targetHandle: targetHandle,
+            type: w > 1 ? 'smoothstep' : 'straight',
+            style: { stroke: "#ca8a04", strokeWidth: 3 },
+            animated: true
           });
 
-          currentY += 100;
+          currentY += 80;
           prevNodeId = weekId;
         }
       }
     } else {
-      // DETAILED MODE
+      // DETAILED MODE (Mind-Map Layout)
       const backId = 'back-node';
       nds.push({
         id: backId,
         type: 'back',
-        position: { x: CENTER_X - 100, y: 0 },
+        position: { x: 50, y: 0 },
         data: { onClick: () => setDrillDown(null) }
       });
 
-      let prevNodeId = backId;
-      
       // Filter raw tasks based on drillDown
       const filteredRaw = activeRaw.filter(t => {
         if (drillDown.type === 'week') return parseInt(t[0], 10) === drillDown.value;
@@ -224,82 +286,198 @@ export default function RoadmapInteractiveTree({ activeRoadmapDef, activeRaw, ac
         return true;
       });
 
-      const weeks = {};
-      filteredRaw.forEach(task => {
-        const w = parseInt(task[0], 10);
-        if (!weeks[w]) weeks[w] = [];
-        weeks[w].push({
-          id: task.id,
-          topic: task[3],
-          track: task[2],
-          hrs: task[5],
-          desc: task[8],
-          priority: task[7],
-          isDone: !!(doneMap && doneMap[task.id])
-        });
-      });
+      // Group: We no longer group by week if drillDown is track. We use ONE central node.
+      const tasks = filteredRaw.map(task => ({
+        id: task.id,
+        topic: task[3],
+        track: task[2],
+        hrs: task[5],
+        desc: task[8],
+        priority: task[7],
+        isDone: !!(doneMap && doneMap[task.id]),
+        rawTask: task
+      }));
 
-      const sortedWeeks = Object.keys(weeks).map(Number).sort((a,b)=>a-b);
+      let centralId = '';
+      let centralTitle = '';
+      let centralType = 'mm-week';
+      let centralColor = '#f59e0b';
+
+      if (drillDown.type === 'track') {
+        const trackDef = activeTracks?.find(t => t.id === drillDown.value);
+        centralId = `track-${drillDown.value}`;
+        centralTitle = trackDef?.label || 'Track';
+        centralType = 'mm-track';
+        centralColor = trackDef?.color || '#3b82f6';
+      } else {
+        centralId = `week-${drillDown.value}`;
+        centralTitle = `Week ${drillDown.value}`;
+      }
+
+      let currentY = 100;
       
-      sortedWeeks.forEach(w => {
-        const weekId = `week-${w}`;
-        const isRightSide = (w % 2 !== 0);
+      if (drillDown.type === 'track') {
+        // HIERARCHY: Track -> Week -> Topics
+        const weeks = {};
+        tasks.forEach(task => {
+          const w = task.rawTask[0];
+          if (!weeks[w]) weeks[w] = [];
+          weeks[w].push(task);
+        });
 
+        const sortedWeeks = Object.keys(weeks).map(Number).sort((a,b)=>a-b);
+        
+        let leftY = currentY;
+        let rightY = currentY;
+        let isLeft = true;
+
+        sortedWeeks.forEach((w) => {
+          const weekTasks = weeks[w];
+          const weekId = `week-${w}`;
+          
+          let yPtr = isLeft ? leftY : rightY;
+          let startWeekY = yPtr;
+
+          weekTasks.forEach(task => {
+            const topicId = task.id;
+            nds.push({
+              id: topicId,
+              type: 'mm-topic',
+              position: { x: isLeft ? -560 : 600, y: yPtr },
+              data: {
+                task: task.rawTask,
+                title: task.topic,
+                isDone: task.isDone,
+                isJoined: isJoined,
+                onClick: onNodeClick
+              }
+            });
+
+            eds.push({
+              id: `e-${edgeIdCounter++}`,
+              source: weekId,
+              sourceHandle: isLeft ? 'left' : 'right',
+              target: topicId,
+              targetHandle: isLeft ? 'right' : 'left',
+              type: 'smoothstep',
+              style: { stroke: centralColor, strokeWidth: 2, opacity: 0.6 },
+              pathOptions: { borderRadius: 30 }
+            });
+
+            yPtr += 56;
+          });
+
+          // Draw intermediate week node
+          const weekCenterY = startWeekY + (yPtr - startWeekY)/2 - 24;
+          nds.push({
+            id: weekId,
+            type: 'mm-week',
+            position: { x: isLeft ? -260 : 300, y: weekCenterY },
+            data: { title: `Week ${w}` }
+          });
+
+          // Edge from Track to Week
+          eds.push({
+            id: `e-${edgeIdCounter++}`,
+            source: centralId,
+            sourceHandle: isLeft ? 'left' : 'right',
+            target: weekId,
+            targetHandle: isLeft ? 't-right' : 't-left',
+            type: 'smoothstep',
+            style: { stroke: centralColor, strokeWidth: 3, opacity: 0.9 },
+            pathOptions: { borderRadius: 30 }
+          });
+
+          yPtr += 30; // space after week block
+          
+          if (isLeft) leftY = yPtr;
+          else rightY = yPtr;
+          
+          isLeft = !isLeft;
+        });
+
+        const maxSideY = Math.max(leftY, rightY) || currentY;
+        const centralY = currentY + (maxSideY - currentY) / 2 - 24;
+        
         nds.push({
-          id: weekId,
-          type: 'week',
-          position: { x: CENTER_X - 60, y: currentY },
+          id: centralId,
+          type: centralType,
+          position: { x: 20, y: centralY },
           data: { 
-            title: `Week ${w}`,
-            task: { type: 'week', weekNum: w, tasks: weeks[w] || [] },
+            title: centralTitle,
+            color: centralColor,
+            task: drillDown,
             onClick: onNodeClick 
           }
         });
 
-        eds.push({
-          id: `e-${edgeIdCounter++}`,
-          source: prevNodeId,
-          target: weekId,
-          type: 'straight',
-          style: { stroke: "#ca8a04", strokeWidth: 2 }
-        });
+        currentY = maxSideY + 60;
 
-        const tasks = weeks[w] || [];
-        const topicSpacingY = 50;
-        const startTopicY = currentY - ((tasks.length - 1) * topicSpacingY) / 2;
+      } else {
+        // FLAT: Week -> Topics (already balanced)
+        const shouldSplit = tasks.length > 5;
+        let leftY = currentY;
+        let rightY = currentY;
+        let leftCount = 0;
+        let rightCount = 0;
 
-        tasks.forEach((task, tIdx) => {
+        tasks.forEach((task) => {
           const topicId = task.id;
-          const topicY = startTopicY + tIdx * topicSpacingY;
-          const topicX = isRightSide ? CENTER_X + 120 : CENTER_X - 340; 
-
+          const trackColor = activeTracks?.find(t => t.id === task.track)?.color || '#3b82f6';
+          
+          const isLeft = shouldSplit && (leftCount <= rightCount);
+          let yPtr = isLeft ? leftY : rightY;
+          
           nds.push({
             id: topicId,
-            type: 'topic',
-            position: { x: topicX, y: topicY },
+            type: 'mm-topic',
+            position: { x: isLeft ? -260 : 300, y: yPtr },
             data: {
-              task: task,
+              task: task.rawTask,
               title: task.topic,
               isDone: task.isDone,
               isJoined: isJoined,
-              side: isRightSide ? 'right' : 'left',
               onClick: onNodeClick
             }
           });
 
           eds.push({
             id: `e-${edgeIdCounter++}`,
-            source: weekId,
+            source: centralId,
+            sourceHandle: isLeft ? 'left' : 'right',
             target: topicId,
+            targetHandle: isLeft ? 'right' : 'left',
             type: 'smoothstep',
-            style: { stroke: "#6b7280", strokeWidth: 2 },
-            pathOptions: { borderRadius: 24 }
+            style: { stroke: trackColor, strokeWidth: 2, opacity: 0.8 },
+            pathOptions: { borderRadius: 30 }
           });
+
+          if (isLeft) {
+            leftCount++;
+            leftY += 56;
+          } else {
+            rightCount++;
+            rightY += 56;
+          }
         });
 
-        currentY += Math.max(1, tasks.length) * topicSpacingY + 60;
-        prevNodeId = weekId;
-      });
+        const maxSideY = Math.max(leftY, rightY) || currentY;
+        const centralY = currentY + (maxSideY - currentY) / 2 - 24;
+        
+        nds.push({
+          id: centralId,
+          type: centralType,
+          position: { x: 20, y: centralY },
+          data: { 
+            title: centralTitle,
+            color: centralColor,
+            task: drillDown,
+            onClick: onNodeClick 
+          }
+        });
+
+        currentY = maxSideY + 60;
+      }
     }
 
     return { initialNodes: nds, initialEdges: eds, bounds: { minY: 0, maxY: currentY } };

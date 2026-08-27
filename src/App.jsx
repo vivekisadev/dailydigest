@@ -1,7 +1,44 @@
 import { useState, useEffect, useCallback, useRef, memo, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { gsap } from "gsap";
 import { DAYS, TRACKS, RAW, RESOURCES, PLAN, ROADMAPS, PLANS, ALL_TRACKS, ALL_RAW, ALL_RESOURCES } from "./data.js";
 import "./App.css";
+import Lenis from 'lenis';
+import 'lenis/dist/lenis.css';
+
+import { Zap, Puzzle, Monitor, Building, Rocket, Brain, Crown, Settings, User, Map, ClipboardList, Laptop, BarChart3, CalendarDays, Trophy, CheckCircle, Sun, Folder, Video, Lightbulb, GitBranch, Link, Mail, RefreshCw, LogOut, Lock, Eye, EyeOff } from 'lucide-react';
+
+const getLucideIcon = (emoji) => {
+  switch (emoji) {
+    case '⚡': return <Zap size={20} />;
+    case '🔗': return <Link size={20} />;
+    case '🧩': return <Puzzle size={20} />;
+    case '🖥️': return <Monitor size={20} />;
+    case '🏗️': return <Building size={20} />;
+    case '🚀': return <Rocket size={20} />;
+    case '🧠': return <Brain size={20} />;
+    case '👑': return <Crown size={20} />;
+    case '⚙️': return <Settings size={20} />;
+    case '🧑‍💻': return <User size={20} />;
+    case '📚': return '📚';
+    case '🎬': return <Video size={16} />;
+    case '💡': return <Lightbulb size={16} />;
+    case '🐙': return <GitBranch size={16} />;
+    case '🗺️': return <Map size={24} />;
+    case '📋': return <ClipboardList size={24} />;
+    case '💻': return <Laptop size={24} />;
+    case '📊': return <BarChart3 size={24} />;
+    case '📅': return <CalendarDays size={24} />;
+    case '🏆': return <Trophy size={24} />;
+    case '✅': return <CheckCircle size={18} />;
+    case '📧': return <Mail size={20} />;
+    case '🔄': return <RefreshCw size={20} />;
+    case '🚪': return <LogOut size={20} />;
+    case '☀️': return <Sun size={20} />;
+    case '📁': return <Folder size={18} />;
+    default: return emoji;
+  }
+};
 
 // React Bits Components
 import BlurText from "./components/BlurText.jsx";
@@ -18,12 +55,34 @@ import TopHeader from "./components/TopHeader.jsx";
 import ProfileModal from "./components/ProfileModal.jsx";
 import TaskModal from "./components/TaskModal.jsx";
 import MeetingModal from "./components/MeetingModal.jsx";
+import OnboardingModal from "./components/OnboardingModal.jsx";
+import LoginScreen from "./components/LoginScreen.jsx";
 
 import { doc, getDoc, setDoc } from "firebase/firestore";
 import { db } from "./firebase";
 
 /* ═══ HELPERS ═══ */
 function haptic(s="light"){try{navigator.vibrate?.(s==="heavy"?30:s==="medium"?15:8)}catch(e){}}
+
+function playTing() {
+  try {
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContext) return;
+    const ctx = new AudioContext();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(800, ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(300, ctx.currentTime + 0.5);
+    gain.gain.setValueAtTime(1, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.5);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.5);
+  } catch (e) {}
+}
+
 
 /* ═══ NOTIFICATION SYSTEM ═══ */
 function setupNotifications(todayTasks, done) {
@@ -49,6 +108,7 @@ function setupNotifications(todayTasks, done) {
     if (delay > 0 && delay < 12*60*60*1000) {
       setTimeout(() => {
         new Notification("⏰ Deadline Approaching!", { body: `${task.topic} (${dl.label}) ends in 30 minutes!`, icon: "📚" });
+        playTing();
       }, delay);
     }
   });
@@ -59,6 +119,7 @@ function setupNotifications(todayTasks, done) {
     if (delay > 0 && delay < 12*60*60*1000) {
       setTimeout(() => {
         new Notification("📋 Study Reminder", { body: `You have ${pending.length} pending tasks today. Keep going!` });
+        playTing();
       }, delay);
     }
   });
@@ -67,9 +128,9 @@ function setupNotifications(todayTasks, done) {
 /* ═══ PREMIUM VARIANTS ═══ */
 const spring = { type: "spring", stiffness: 300, damping: 25 };
 const fadeUp = { 
-  initial: { opacity: 0, y: 16, filter: "blur(6px)" }, 
-  animate: { opacity: 1, y: 0, filter: "blur(0px)", transition: { duration: 0.6, ease: [0.16, 1, 0.3, 1] } }, 
-  exit: { opacity: 0, y: -12, filter: "blur(4px)", transition: { duration: 0.4, ease: [0.16, 1, 0.3, 1] } }
+  initial: { opacity: 0, filter: "blur(24px) brightness(0.5)", scale: 0.98 }, 
+  animate: { opacity: 1, filter: "blur(0px) brightness(1)", scale: 1, transition: { duration: 0.6, ease: [0.16, 1, 0.3, 1] } }, 
+  exit: { opacity: 0, filter: "blur(24px) brightness(0.5)", scale: 0.98, transition: { duration: 0.3, ease: [0.7, 0, 0.84, 0] } }
 };
 const scaleIn = { 
   initial: { opacity: 0, scale: 0.96, filter: "blur(4px)" }, 
@@ -92,6 +153,8 @@ const TopicCard = memo(({ task, track, isDone, isExpanded, onToggleExpand, onTog
   const resources = (activeResources || RESOURCES)[task.topic] || [];
   return (
     <motion.div className="roadmap-topic interactable" layout {...scaleIn}
+      whileHover={{ scale: 1.015, y: -2, boxShadow: "0 8px 24px rgba(0,0,0,0.15)" }}
+      whileTap={{ scale: 0.98 }}
       style={{ "--track-color": track.color, borderColor: isExpanded ? track.color + "44" : "var(--border)" }}>
       <div className="roadmap-topic-row" onClick={onToggleExpand}>
         <div className="roadmap-topic-left">
@@ -179,7 +242,7 @@ const TopicCard = memo(({ task, track, isDone, isExpanded, onToggleExpand, onTog
                     return (
                       <a key={i} href={url} target="_blank" rel="noopener noreferrer" className="resource-link interactable"
                         onClick={e => e.stopPropagation()}>
-                        <span className="resource-icon">{domain.includes("youtube") ? "🎬" : domain.includes("leetcode") ? "💡" : domain.includes("github") ? "🐙" : "🔗"}</span>
+                        <span className="resource-icon">{getLucideIcon(domain.includes("youtube") ? "🎬" : domain.includes("leetcode") ? "💡" : domain.includes("github") ? "🐙" : "🔗")}</span>
                         <span className="resource-domain">{domain}</span>
                         <span className="resource-arrow">↗</span>
                       </a>
@@ -195,169 +258,279 @@ const TopicCard = memo(({ task, track, isDone, isExpanded, onToggleExpand, onTog
   );
 });
 
-/* ═══ LOGIN SCREEN ═══ */
-function LoginScreen({ onLogin }) {
-  const [isSignUp, setIsSignUp] = useState(false);
-  const [username, setUsername] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [selectedTracks, setSelectedTracks] = useState([0, 1, 2, 3]); // Pick categories
-  const [error, setError] = useState("");
+/* ═══ DAILY SCHEDULE VIEW ═══ */
+const DailyScheduleView = ({ dateStr, onClose, tasks, done, toggle, TRACKS, activeTracks }) => {
+  const displayTasks = tasks || [];
+  
+  return (
+    <motion.div 
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: 10 }}
+      style={{
+        flex: 1,
+        width: '100%',
+        height: '100%',
+        background: 'var(--bg)', 
+        padding: '24px 32px',
+        display: 'flex', 
+        flexDirection: 'column',
+        overflow: 'hidden'
+      }}
+    >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 32 }}>
+          <div>
+            <h2 style={{ fontSize: 28, margin: 0 }}>Dashboard • {new Date(dateStr).toLocaleDateString()}</h2>
+            <div style={{ color: 'var(--sub)', fontSize: 14, marginTop: 4 }}>Check out latest updates for this date</div>
+          </div>
+          <button className="dash-btn interactable" onClick={onClose} style={{ background: 'var(--glass)', border: 'none' }}>✕ Close</button>
+        </div>
 
-    const handleAuth = async (e) => {
-    e.preventDefault();
-    if (username.trim().length < 3) {
-      setError("Username must be at least 3 characters.");
-      return;
-    }
-    
-    setError("Connecting...");
-    const userKey = username.trim();
-    
-    let existsInDb = false;
-    let firebaseAvailable = true;
-    const docRef = doc(db, "users", userKey);
-    try {
-      const snap = await getDoc(docRef);
-      existsInDb = snap.exists();
-    } catch (err) {
-      console.error(err);
-      // Firebase might have permission issues — allow local-only mode
-      if (err.code === 'permission-denied' || err.message?.includes('permission')) {
-        firebaseAvailable = false;
-        console.warn('Firebase permissions denied — falling back to local mode');
-      } else {
-        setError("Failed to connect. Check internet.");
-        return;
-      }
-    }
+        <div style={{ display: 'flex', gap: 16, marginBottom: 32, overflowX: 'auto', paddingBottom: 8, scrollbarWidth: 'none', flexShrink: 0 }}>
+          {/* Card 1: Overall Progress */}
+          <div style={{ minWidth: 260, flex: 1, background: 'var(--accent)', borderRadius: 20, padding: '24px', color: '#fff', position: 'relative', overflow: 'hidden' }}>
+            <div style={{ position: 'relative', zIndex: 2 }}>
+              <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 16 }}>Overall Progress</div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 8 }}>
+                <span style={{ fontSize: 13, opacity: 0.9 }}>Progress</span>
+                <span style={{ fontSize: 14, fontWeight: 700 }}>{displayTasks.length > 0 ? Math.round(displayTasks.filter(t => done[t.id]).length / displayTasks.length * 100) : 0}%</span>
+              </div>
+              <div style={{ height: 4, background: 'rgba(255,255,255,0.3)', borderRadius: 2, overflow: 'hidden', marginBottom: 16 }}>
+                <motion.div initial={{ width: 0 }} animate={{ width: `${displayTasks.length > 0 ? Math.round(displayTasks.filter(t => done[t.id]).length / displayTasks.length * 100) : 0}%` }} transition={{ duration: 1 }} style={{ height: '100%', background: '#fff', borderRadius: 2 }} />
+              </div>
+              <div style={{ fontSize: 12, opacity: 0.8 }}>{new Date(dateStr).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</div>
+            </div>
+          </div>
 
-    if (isSignUp) {
-      if (email.trim().length < 5 || !email.includes("@")) {
-        setError("Please enter a valid email address for notifications.");
-        return;
-      }
-      if (existsInDb) {
-        setError("Username already exists in the cloud. Please log in.");
-        return;
-      }
-      
-      // Save notification email, base progress & selected roadmap niches!
-      const userData = {
-        username: userKey,
-        email: email.trim(),
-        selectedTracks: selectedTracks.length > 0 ? selectedTracks : [0, 1, 2, 3],
-        startDate: new Date().toISOString(),
-        progress: {},
-        customTasks: [],
-        completedTaskNames: [],
-        joinedRoadmaps: ["faang-90"],
-        activeRoadmap: "faang-90"
-      };
-      
-      if (firebaseAvailable) {
-        try {
-          await setDoc(docRef, userData);
-        } catch (err) {
-          console.warn('Firebase write failed, using local storage', err);
-          localStorage.setItem(`vtask_user_${userKey}`, JSON.stringify(userData));
+          {/* Card 2: Scheduled Tasks */}
+          <div style={{ minWidth: 260, flex: 1, background: '#EF4444', borderRadius: 20, padding: '24px', color: '#fff', position: 'relative', overflow: 'hidden' }}>
+            <div style={{ position: 'relative', zIndex: 2 }}>
+              <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 16 }}>Scheduled Tasks</div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 8 }}>
+                <span style={{ fontSize: 13, opacity: 0.9 }}>Tasks</span>
+                <span style={{ fontSize: 14, fontWeight: 700 }}>{displayTasks.length}</span>
+              </div>
+              <div style={{ height: 4, background: 'rgba(255,255,255,0.3)', borderRadius: 2, overflow: 'hidden', marginBottom: 16 }}>
+                <div style={{ height: '100%', background: '#fff', borderRadius: 2, width: '100%' }} />
+              </div>
+              <div style={{ fontSize: 12, opacity: 0.8 }}>{displayTasks.filter(t => done[t.id]).length} completed</div>
+            </div>
+          </div>
+
+          {/* Card 3: Study Hours */}
+          <div style={{ minWidth: 260, flex: 1, background: '#F59E0B', borderRadius: 20, padding: '24px', color: '#fff', position: 'relative', overflow: 'hidden' }}>
+            <div style={{ position: 'relative', zIndex: 2 }}>
+              <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 16 }}>Study Hours</div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 8 }}>
+                <span style={{ fontSize: 13, opacity: 0.9 }}>Total</span>
+                <span style={{ fontSize: 14, fontWeight: 700 }}>{displayTasks.reduce((acc, t) => acc + (t.duration || 1), 0)}h</span>
+              </div>
+              <div style={{ height: 4, background: 'rgba(255,255,255,0.3)', borderRadius: 2, overflow: 'hidden', marginBottom: 16 }}>
+                <div style={{ height: '100%', background: '#fff', borderRadius: 2, width: '100%' }} />
+              </div>
+              <div style={{ fontSize: 12, opacity: 0.8 }}>Time allocated for today</div>
+            </div>
+          </div>
+        </div>
+
+        <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '16px 20px', borderRadius: 8, background: 'var(--card)', border: '1px solid var(--border-light)' }}>
+            <div style={{ color: 'var(--sub)' }}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 12h14M12 5v14"/></svg>
+            </div>
+            <input type="text" placeholder="Type to add a new task..." style={{ flex: 1, background: 'transparent', border: 'none', color: 'var(--text)', fontSize: 15, outline: 'none' }} />
+            <button style={{ background: 'var(--card2)', border: 'none', color: 'var(--text)', padding: '6px 12px', borderRadius: 6, fontSize: 13, fontWeight: 500 }}>Set date</button>
+          </div>
+
+          {displayTasks.length === 0 && (
+            <div style={{textAlign:'center', color:'var(--sub)', padding: '24px 0'}}>No tasks scheduled for this date.</div>
+          )}
+
+          {displayTasks.map((task, idx) => {
+            const tr = (activeTracks[task.track] || TRACKS[task.track] || TRACKS[0]);
+            const isDone = !!done[task.id];
+            return (
+              <motion.div 
+                key={task.id} 
+                className="task-card-v2"
+                style={{ 
+                  opacity: isDone ? 0.6 : 1, 
+                  margin: 0, 
+                  padding: '16px', 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: 16,
+                  borderRadius: 16,
+                  border: '1px solid transparent',
+                  background: 'var(--card)',
+                  cursor: 'pointer'
+                }}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: isDone ? 0.6 : 1, y: 0 }}
+                transition={{ delay: idx * 0.04, duration: 0.3 }}
+              >
+                <div style={{ width: 48, height: 48, borderRadius: '50%', background: isDone ? 'var(--glass)' : `${tr.color}22`, color: isDone ? 'var(--sub)' : tr.color, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    {isDone ? <polyline points="20 6 9 17 4 12"></polyline> : <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>}
+                  </svg>
+                </div>
+                
+                <div style={{ flex: 1 }}>
+                  <div style={{ textDecoration: isDone ? 'line-through' : 'none', fontWeight: 600, fontSize: 16, color: isDone ? 'var(--sub)' : 'var(--text)', marginBottom: 4 }}>
+                    {task.topic}
+                  </div>
+                  <div style={{ fontSize: 13, color: 'var(--sub)' }}>
+                    {tr.label} • {task.duration || 1}h
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <button 
+                    className="check-btn interactable"
+                    onClick={(e) => { e.stopPropagation(); toggle(task.id); }}
+                    style={{
+                      width: 32, height: 32, borderRadius: '50%',
+                      background: isDone ? 'var(--accent)' : 'var(--card2)',
+                      border: isDone ? 'none' : '2px solid var(--border)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      color: isDone ? '#fff' : 'transparent',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                  </button>
+                </div>
+              </motion.div>
+            );
+          })}
+        </div>
+    </motion.div>
+  );
+};
+
+/* ═══ INTERACTIVE FEATURE CARD (GSAP) ═══ */
+const FeatureHoverCard = ({ icon, title, desc, delay, velocityRef }) => {
+  const cardRef = useRef(null);
+
+  useEffect(() => {
+    if (window.InertiaPlugin) {
+      gsap.registerPlugin(window.InertiaPlugin);
+    }
+    // Initial entrance animation
+    gsap.fromTo(cardRef.current, 
+      { opacity: 0, scale: 0.8 }, 
+      { opacity: 1, scale: 1, delay: delay, duration: 0.8, ease: "elastic.out(1, 0.7)" }
+    );
+  }, [delay]);
+
+  const handleMouseEnter = () => {
+    if (!cardRef.current) return;
+    
+    const vx = velocityRef.current.x * 30; // Amplifier
+    const vy = velocityRef.current.y * 30;
+    
+    // Kill existing animations on this element to prevent conflicts
+    gsap.killTweensOf(cardRef.current);
+
+    const tl = gsap.timeline({
+      onComplete: () => tl.kill()
+    });
+    tl.timeScale(1.2);
+
+    // Inertia shift
+    if (window.InertiaPlugin) {
+      tl.to(cardRef.current, {
+        inertia: {
+          x: { velocity: vx, end: 0 },
+          y: { velocity: vy, end: 0 }
         }
-      } else {
-        localStorage.setItem(`vtask_user_${userKey}`, JSON.stringify(userData));
-      }
+      });
     } else {
-      if (!existsInDb && !firebaseAvailable) {
-        // In local mode, check localStorage
-        const localData = localStorage.getItem(`vtask_user_${userKey}`);
-        if (!localData) {
-          setError("Account not found. Please click 'Create Account' below to start fresh!");
-          return;
-        }
-      } else if (!existsInDb) {
-        setError("Account not found. Please click 'Create Account' below to start fresh!");
-        return;
-      }
+      // Fallback if plugin fails to load
+      tl.to(cardRef.current, {
+        x: vx * 0.1, y: vy * 0.1, duration: 0.2, ease: "power2.out"
+      }).to(cardRef.current, {
+        x: 0, y: 0, duration: 0.5, ease: "elastic.out(1, 0.5)"
+      });
     }
 
-    onLogin(userKey);
+    // Random rotation
+    tl.fromTo(cardRef.current, { rotate: 0 }, {
+      duration: 0.4,
+      rotate: (Math.random() - 0.5) * 30, // -15 to +15
+      yoyo: true,
+      repeat: 1,
+      ease: 'power1.inOut'
+    }, '<');
   };
 
   return (
-    <div className="app-shell" style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "100dvh", padding: 20 }}>
-      <motion.div className="auth-card" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={spring}>
-        <div style={{ textAlign: "center", marginBottom: 30 }}>
-          <div className="avatar" style={{ margin: "0 auto 16px", width: 56, height: 56, background: "var(--accent-glow-strong)", color: "var(--accent2)", fontSize: 24, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: "var(--radius-md)" }}>{isSignUp ? "✨" : "🗝️"}</div>
-          <h1 className="hero-title" style={{ fontSize: 24, marginBottom: 8, fontWeight: 800, letterSpacing: "-0.02em" }}>{isSignUp ? "Start Your Journey" : "Welcome Back"}</h1>
-          <p className="hero-subtitle" style={{ fontSize: 13, lineHeight: 1.5, color: "var(--sub)" }}>
-            {isSignUp ? "Create a local profile to begin tracking your FAANG progress independently." : "Sign in to securely access your progress saved on this device."}
-          </p>
-        </div>
-        <form onSubmit={handleAuth} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-          <div className="form-group">
-            <label style={{ fontSize: 13, color: "var(--sub)" }}>Username</label>
-            <input className="input-field" placeholder="Enter your username..." value={username} onChange={e => { setUsername(e.target.value); setError(""); }} required />
-          </div>
-          <AnimatePresence>
-            {isSignUp && (
-              <motion.div className="form-group" initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} style={{ overflow: "hidden" }}>
-                <label style={{ fontSize: 13, color: "var(--sub)" }}>Email Address (For Task Alerts)</label>
-                <input className="input-field" type="email" placeholder="your@email.com" value={email} onChange={e => { setEmail(e.target.value); setError(""); }} required={isSignUp} />
-                
-                <label style={{ fontSize: 13, color: "var(--sub)", marginTop: 12, display: "block" }}>Select Roadmaps (Focus Mode)</label>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 6 }}>
-                  {TRACKS.map(t => (
-                    <div key={t.id} className="interactable" onClick={() => {
-                      if (selectedTracks.includes(t.id)) setSelectedTracks(selectedTracks.filter(x => x !== t.id));
-                      else setSelectedTracks([...selectedTracks, t.id]);
-                    }} style={{ padding: "8px 14px", borderRadius: 8, fontSize: 13, border: "1px solid " + t.color, background: selectedTracks.includes(t.id) ? t.color : "transparent", color: selectedTracks.includes(t.id) ? "#0A0A0F" : t.color, fontWeight: 600, cursor: "pointer", transition: "all 0.2s" }}>
-                      {t.label} {selectedTracks.includes(t.id) ? "✓" : "+"}
-                    </div>
-                  ))}
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-          <div className="form-group">
-            <label style={{ fontSize: 13, color: "var(--sub)" }}>Password (Optional)</label>
-            <input className="input-field" type="password" placeholder="••••••••" value={password} onChange={e => { setPassword(e.target.value); setError(""); }} />
-          </div>
-          {error && <div style={{ color: "var(--red)", fontSize: 13, textAlign: "center", marginTop: -4 }}>{error}</div>}
-          <button type="submit" className="create-btn interactable" style={{ marginTop: 10, padding: 16, fontSize: 15, fontWeight: 600 }}>
-            {isSignUp ? "Create Account →" : "Log In to Roadmap →"}
-          </button>
-        </form>
-        
-        <div style={{ marginTop: 24, textAlign: "center", fontSize: 13, color: "var(--sub)" }}>
-          {isSignUp ? "Already have an account? " : "New to the roadmap? "}
-          <span className="interactable" style={{ color: "var(--accent2)", cursor: "pointer", fontWeight: 600 }} onClick={() => { setIsSignUp(!isSignUp); setError(""); setUsername(""); setPassword("") }}>
-            {isSignUp ? "Log in" : "Create Account"}
-          </span>
-        </div>
-      </motion.div>
+    <div
+      ref={cardRef}
+      className="login-feature-card"
+      onMouseEnter={handleMouseEnter}
+    >
+      <div className="login-fc-icon">{getLucideIcon(icon)}</div>
+      <div className="login-fc-content">
+        <div className="login-fc-title">{title}</div>
+        <div className="login-fc-desc">{desc}</div>
+      </div>
+      <div className="login-fc-glow" />
     </div>
   );
-}
+};
+
+/* ═══ LOGIN SCREEN ═══ */
+
 
 /* ═══ TASK CENTER VIEW ═══ */
 const TaskCenterView = ({ detailTask, TRACKS, activeTracks, activeResources, RESOURCES, closeDetail, fadeUp, doneMap, onToggleDone }) => {
   const tr = (activeTracks?.[detailTask.track] || TRACKS?.[detailTask.track] || TRACKS?.[0] || { color: '#888', label: 'General' });
   const resources = (activeResources?.[detailTask.topic] || RESOURCES?.[detailTask.topic] || []);
+  const [aiData, setAiData] = useState(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [geminiKey, setGeminiKey] = useState(() => localStorage.getItem("vtask_gemini_key") || "");
+  const [showKeyInput, setShowKeyInput] = useState(false);
+
+  const handleAiAssist = async () => {
+    if (!geminiKey) { setShowKeyInput(true); return; }
+    setAiLoading(true); setAiData(null);
+    try {
+      const prompt = `You are an AI study assistant. Generate study material for the topic: "${detailTask.topic}". Return a JSON object EXACTLY in this format: {"notes": "Markdown string explaining the topic", "resources": [{"name": "Resource Name", "link": "https://...", "type": "Video or Article"}], "practiceProblems": [{"name": "Problem Name", "link": "https://...", "difficulty": "E or M or H"}]}`;
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiKey}`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+      });
+      const data = await res.json();
+      const text = data.candidates[0].content.parts[0].text;
+      const jsonStr = text.replace(/```json/g, '').replace(/```/g, '').trim();
+      setAiData(JSON.parse(jsonStr));
+    } catch(e) {
+      alert("AI request failed. Check API key.");
+    }
+    setAiLoading(false);
+  };
+
+  const saveKey = (k) => { setGeminiKey(k); localStorage.setItem("vtask_gemini_key", k); setShowKeyInput(false); handleAiAssist(); };
 
   return (
-    <motion.div className="page" key="task-center" {...fadeUp} style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 100px)' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
-        <button className="interactable" onClick={closeDetail} style={{ background: 'var(--glass)', border: '1px solid var(--border)', color: 'var(--sub)', padding: '8px 16px', borderRadius: 8, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 600 }}>
-          <span>←</span> Back to Dashboard
-        </button>
-      </div>
-
-      <div style={{ padding: '0 16px', flex: 1, overflowY: 'auto', paddingBottom: 64 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-          <span style={{ background: `${tr.color}22`, color: tr.color, padding: '4px 10px', borderRadius: 6, fontSize: 12, fontWeight: 700 }}>{tr.label}</span>
-          <span style={{ color: 'var(--sub)', fontSize: 13 }}>Week {detailTask[0]} • Day {detailTask[1]}</span>
+<motion.div className="page" key="task-center" {...fadeUp} style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 100px)' }}>
+      <div style={{ padding: '0 32px', flex: 1, overflowY: 'auto', paddingBottom: 64 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24, marginTop: 20 }}>
+          <div style={{ fontSize: 14, color: 'var(--text-secondary)', fontWeight: 500 }}>
+            # {tr.label} / Week {detailTask[0]} / Day {detailTask[1]}
+          </div>
+          <button className="interactable" onClick={closeDetail} style={{ background: 'transparent', color: 'var(--sub)', border: 'none', cursor: 'pointer', fontSize: 14, fontWeight: 600 }}>Close ✕</button>
         </div>
         
-        <h1 style={{ fontSize: 42, fontWeight: 800, color: 'var(--text)', marginBottom: 24, lineHeight: 1.1 }}>{detailTask.topic}</h1>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--border)', paddingBottom: 24, marginBottom: 32 }}>
+          <h1 style={{ fontSize: 36, fontWeight: 700, margin: 0, color: 'var(--text)' }}>
+            {detailTask.topic}
+          </h1>
+          <button className="interactable" onClick={handleAiAssist} style={{ background: 'var(--card2)', color: 'var(--text)', border: '1px solid var(--border)', padding: '8px 16px', borderRadius: 8, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 600 }}>
+            <span>✨</span> AI Assist
+          </button>
+        </div>
         
         <div style={{ fontSize: 16, color: 'var(--text-secondary)', lineHeight: 1.7, marginBottom: 40, maxWidth: 800 }}>
           {detailTask.desc ? (
@@ -486,6 +659,48 @@ const TaskCenterView = ({ detailTask, TRACKS, activeTracks, activeResources, RES
             </div>
           );
         })()}
+
+        {showKeyInput && (
+          <div style={{ marginTop: 24, padding: 16, background: 'var(--card)', borderRadius: 12, border: '1px solid var(--border)' }}>
+            <h4 style={{ marginBottom: 12, color: 'var(--text)' }}>Enter Gemini API Key</h4>
+            <input type="text" placeholder="AIzaSy..." onBlur={(e) => saveKey(e.target.value)} style={{ width: '100%', padding: '12px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--glass)', color: '#fff' }} />
+            <p style={{ fontSize: 12, color: 'var(--sub)', marginTop: 8 }}>Get one from Google AI Studio. Stored locally.</p>
+          </div>
+        )}
+        {aiLoading && <div style={{ marginTop: 24, padding: 16, textAlign: 'center', color: 'var(--sub)' }}>✨ AI is thinking...</div>}
+        {aiData && (
+          <div style={{ marginTop: 32, padding: 24, background: 'rgba(167, 139, 250, 0.05)', borderRadius: 16, border: '1px solid rgba(167, 139, 250, 0.2)' }}>
+            <h3 style={{ fontSize: 24, fontWeight: 800, color: '#A78BFA', marginBottom: 16 }}>✨ AI Study Notes</h3>
+            <div style={{ color: 'var(--text)', lineHeight: 1.6, marginBottom: 24, fontSize: 15 }} dangerouslySetInnerHTML={{ __html: aiData.notes?.replace(/\n/g, '<br/>') || '' }} />
+            
+            {aiData.resources?.length > 0 && (
+              <div style={{ marginBottom: 24 }}>
+                <h4 style={{ color: '#fff', marginBottom: 12, fontSize: 18 }}>Recommended Resources</h4>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {aiData.resources.map((r, i) => (
+                    <a key={i} href={r.link} target="_blank" rel="noreferrer" style={{ display: 'flex', alignItems: 'center', padding: 12, background: 'var(--card-solid)', borderRadius: 8, color: '#A78BFA', textDecoration: 'none', border: '1px solid var(--border)' }}>
+                      <span style={{ marginRight: 8 }}>{r.type === 'Video' ? '▶' : '📄'}</span> {r.name} <span style={{ marginLeft: 'auto', fontSize: 12 }}>↗</span>
+                    </a>
+                  ))}
+                </div>
+              </div>
+            )}
+            
+            {aiData.practiceProblems?.length > 0 && (
+              <div>
+                <h4 style={{ color: '#fff', marginBottom: 12, fontSize: 18 }}>Practice Problems</h4>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {aiData.practiceProblems.map((p, i) => (
+                    <a key={i} href={p.link} target="_blank" rel="noreferrer" style={{ display: 'flex', justifyContent: 'space-between', padding: 12, background: 'var(--card-solid)', borderRadius: 8, color: '#3FB950', textDecoration: 'none', border: '1px solid var(--border)' }}>
+                      <span>{p.name} ↗</span>
+                      <span style={{ fontWeight: 'bold' }}>[{p.difficulty}]</span>
+                    </a>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </motion.div>
   );
@@ -544,7 +759,7 @@ const HomeRoadmapSwitcher = ({ joinedRoadmaps, activeRoadmap, ROADMAPS, switchRo
                 cursor: 'pointer', transition: 'all 0.2s', whiteSpace: 'nowrap',
                 display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0
               }}>
-              <span>{rm.icon}</span> {rm.label}
+              {rm.label}
             </motion.button>
           );
         })}
@@ -577,6 +792,10 @@ export default function App() {
 
 /* ═══ MAIN APP ═══ */
 function MainApp({ user, onLogout }) {
+  useEffect(() => {
+    // Lenis removed to fix internal scrollable areas (sidebar, app-content)
+  }, []);
+
   const [isDbLoaded, setIsDbLoaded] = useState(false);
   const now = new Date();
   const rawDay = now.getDay();
@@ -586,8 +805,9 @@ function MainApp({ user, onLogout }) {
   /* ═══ MULTI-ROADMAP STATE ═══ */
   const [activeRoadmap, setActiveRoadmap] = useState("faang-90");
   const [joinedRoadmaps, setJoinedRoadmaps] = useState({ "faang-90": Date.now() });
-  const [userProfile, setUserProfile] = useState({ name: user || "User", avatar: "", email: "", theme: "dark" });
+  const [userProfile, setUserProfile] = useState({ name: user || "User", avatar: "", email: "", theme: "dark", onboardingCompleted: false });
   const [selectedActivityDate, setSelectedActivityDate] = useState(null);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
   // Derived active roadmap data
   const activeRoadmapDef = useMemo(() => ROADMAPS.find(r => r.id === activeRoadmap) || ROADMAPS[0], [activeRoadmap]);
@@ -618,8 +838,10 @@ function MainApp({ user, onLogout }) {
   const [newTask, setNewTask] = useState({ name: "", desc: "", priority: "Medium", track: 0, week: 1, day: 0 });
   const [customTasks, setCustomTasks] = useState([]);
   const [meetings, setMeetings] = useState([]);
-  const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
   const [isMeetingModalOpen, setIsMeetingModalOpen] = useState(false);
+  const [editingTask, setEditingTask] = useState(null);
+  const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
+  const [homeTab, setHomeTab] = useState("Today");
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [liveProjects, setLiveProjects] = useState([]);
   const [roadmapTrack, setRoadmapTrack] = useState(null);
@@ -628,11 +850,20 @@ function MainApp({ user, onLogout }) {
   const [notifsEnabled, setNotifsEnabled] = useState(false);
   const [alertEmail, setAlertEmail] = useState("");
   const [rightWidth, setRightWidth] = useState(350);
+  const [taskNavWidth, setTaskNavWidth] = useState(450);
   const scrollRef = useRef(null);
-  const isResizing = useRef(false);
+  
+  const rightResizing = useRef(false);
+  const taskNavResizing = useRef(false);
 
-  const startResize = useCallback((e) => {
-    isResizing.current = true;
+  const startRightResize = useCallback((e) => {
+    rightResizing.current = true;
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+  }, []);
+
+  const startTaskNavResize = useCallback((e) => {
+    taskNavResizing.current = true;
     document.body.style.cursor = 'col-resize';
     document.body.style.userSelect = 'none';
   }, []);
@@ -643,20 +874,34 @@ function MainApp({ user, onLogout }) {
 
   useEffect(() => {
     const handleMouseMove = (e) => {
-      if (!isResizing.current) return;
-      const newWidth = document.body.clientWidth - e.clientX;
-      if (newWidth > 250 && newWidth < 600) setRightWidth(newWidth);
+      if (rightResizing.current) {
+        let newWidth = document.body.clientWidth - e.clientX;
+        if (newWidth < 150) newWidth = 0; // Snap to minimize
+        else if (newWidth > 600) newWidth = 600;
+        else if (newWidth < 250) newWidth = 250;
+        setRightWidth(newWidth);
+      } else if (taskNavResizing.current) {
+        let newWidth = e.clientX - 72; // Left sidebar is 72px when detailTask is open
+        if (newWidth < 150) newWidth = 0; // Snap to minimize
+        else if (newWidth > 600) newWidth = 600;
+        else if (newWidth < 300) newWidth = 300;
+        setTaskNavWidth(newWidth);
+      }
     };
     const handleMouseUp = () => {
-      if (isResizing.current) {
-        isResizing.current = false;
+      if (rightResizing.current || taskNavResizing.current) {
+        rightResizing.current = false;
+        taskNavResizing.current = false;
         document.body.style.cursor = '';
         document.body.style.userSelect = '';
       }
     };
     document.addEventListener('mousemove', handleMouseMove);
     document.addEventListener('mouseup', handleMouseUp);
-    return () => { document.removeEventListener('mousemove', handleMouseMove); document.removeEventListener('mouseup', handleMouseUp); };
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
   }, []);
 
   const openDetail = useCallback((task) => { window.history.pushState({ modal: 'detail' }, ''); setDetailTask(task); }, []);
@@ -682,6 +927,28 @@ function MainApp({ user, onLogout }) {
     if (ac) ac.scrollTop = 0;
     window.scrollTo(0, 0);
   }, [detailTask, tab, activeRoadmap]);
+
+  // Reset day index when switching active roadmaps
+  useEffect(() => {
+    setDetailTask(null);
+  }, [activeRoadmap, tab]);
+
+  // Auto-collapse sidebar when on roadmap tab
+  useEffect(() => {
+    if (tab === 'roadmap') {
+      setIsSidebarCollapsed(true);
+    } else {
+      setIsSidebarCollapsed(false);
+    }
+  }, [tab]);
+
+  // Check if new user needs onboarding
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  useEffect(() => {
+    if (userProfile && userProfile.onboardingCompleted === false) {
+      setShowOnboarding(true);
+    }
+  }, [userProfile]);
 
   useEffect(() => {
     async function loadData() {
@@ -800,6 +1067,22 @@ function MainApp({ user, onLogout }) {
     flushTimeout.current = setTimeout(() => flushToDatabase(), 3000);
   }, [user, flushToDatabase]);
 
+  const handleUpdateCustomTask = useCallback((taskId, updatedData) => {
+    setCustomTasks(prev => {
+       const updated = prev.map(t => t.id === taskId ? { ...t, ...updatedData } : t);
+       persist({ customTasks: updated });
+       return updated;
+    });
+  }, [persist]);
+
+  const handleDeleteCustomTask = useCallback((taskId) => {
+    setCustomTasks(prev => {
+       const updated = prev.filter(t => t.id !== taskId);
+       persist({ customTasks: updated });
+       return updated;
+    });
+  }, [persist]);
+
   const rmPrefix = activeRoadmap + ':';
   const combinedTasks = useMemo(() => {
     return [
@@ -827,20 +1110,53 @@ function MainApp({ user, onLogout }) {
   }, [activeRaw, customTasks, activeRoadmap, rmPrefix]);
 
   const actualTodayTasks = useMemo(() => {
-    return combinedTasks.filter(t => 
+    const today = new Date();
+    const todayStr = today.toISOString().split('T')[0];
+    const todayDowObj = today.getDay(); // 0 = Sun, 1 = Mon, ..., 6 = Sat
+    // map JS day of week to our M,T,W... array index.
+    const mappedDow = todayDowObj === 0 ? 6 : todayDowObj - 1;
+
+    const roadmapTasksToday = combinedTasks.filter(t => 
+      !t.isCustom && 
       t.week === currentWeekIdx && 
       t.day === currentDayIdx && 
       assignedTracks.includes(t.track)
     );
-  }, [combinedTasks, currentWeekIdx, currentDayIdx, assignedTracks]);
+
+    const customTasksToday = customTasks.filter(ct => {
+      if (ct.rmId !== activeRoadmap) return false;
+      if (ct.scheduleType === 'date') {
+        return ct.date === todayStr;
+      } else if (ct.scheduleType === 'repeat') {
+        return ct.repeatDays && ct.repeatDays.includes(mappedDow);
+      }
+      // fallback for old tasks
+      return ct.week === currentWeekIdx && ct.day === currentDayIdx; 
+    });
+
+    return [...roadmapTasksToday, ...customTasksToday];
+  }, [combinedTasks, customTasks, currentWeekIdx, currentDayIdx, assignedTracks, activeRoadmap]);
 
   const incompletePastTasks = useMemo(() => {
     return combinedTasks.filter(t => {
+      if (done[t.id]) return false;
+      
+      if (t.isCustom) {
+        if (t.rmId !== activeRoadmap) return false;
+        if (t.scheduleType === 'date') {
+          const todayStr = new Date().toISOString().split('T')[0];
+          return t.date < todayStr;
+        } else if (t.scheduleType === 'repeat') {
+          return false; // Repeating tasks don't pile up as 'past' tasks, they just appear today
+        }
+        // Fallback for old custom tasks
+      }
+      
       const tDaysElapsed = (t.week - 1) * 7 + t.day;
       const currentDaysElapsed = (currentWeekIdx - 1) * 7 + currentDayIdx;
-      return tDaysElapsed < currentDaysElapsed && assignedTracks.includes(t.track) && !done[t.id];
+      return tDaysElapsed < currentDaysElapsed && assignedTracks.includes(t.track);
     });
-  }, [combinedTasks, currentWeekIdx, currentDayIdx, assignedTracks, done]);
+  }, [combinedTasks, currentWeekIdx, currentDayIdx, assignedTracks, done, customTasks, activeRoadmap]);
 
   const upcomingTasks = useMemo(() => {
     return combinedTasks.filter(t => {
@@ -868,6 +1184,7 @@ function MainApp({ user, onLogout }) {
     }
 
     haptic("medium");
+    if (!done[id]) playTing();
     setDone(prev => {
       const n = { ...prev };
       const isDone = !n[id];
@@ -1009,11 +1326,26 @@ function MainApp({ user, onLogout }) {
 
 
 
+  const toggleNotifs = async () => {
+    if (notifsEnabled) {
+      setNotifsEnabled(false);
+      showToast("🔕 Reminders disabled");
+    } else {
+      if (!("Notification" in window)) { showToast("Notifications not supported"); return; }
+      const p = await Notification.requestPermission();
+      if (p === "granted") {
+        setNotifsEnabled(true);
+        showToast("🔔 Reminders enabled!");
+        new Notification("StudyTrack", { body: "You'll get reminders based on task timings!" });
+      } else showToast("Please allow notifications in settings");
+    }
+  };
+
   const navItems = [
     { id: "home", label: "Home", path: "M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0a1 1 0 01-1-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 01-1 1" },
     { id: "calendar", label: "Calendar", path: "M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" },
     { id: "spacer" },
-    { id: "notif", label: "Alerts", path: "M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" },
+    { id: "notif_toggle", label: notifsEnabled ? "Alerts On" : "Alerts Off", onClick: toggleNotifs, path: "M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" },
     { id: "profile", label: "Profile", path: "M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" },
   ];
 
@@ -1028,7 +1360,12 @@ function MainApp({ user, onLogout }) {
   const computedRightWidth = isOverlayMode ? 0 : rightWidth;
 
   return (
-    <div className="dashboard-layout" ref={scrollRef} style={{ '--right-sidebar-width': showRightSidebar ? `${computedRightWidth}px` : '0px', '--left-sidebar-width': tab === 'roadmap' ? '0px' : '250px' }}>
+    <motion.div 
+      className="dashboard-layout" 
+      ref={scrollRef} 
+      animate={{ '--right-sidebar-width': showRightSidebar ? `${computedRightWidth}px` : '0px', '--left-sidebar-width': (isSidebarCollapsed || detailTask) ? '72px' : '250px' }}
+      transition={{ '--left-sidebar-width': { duration: 0.3, ease: [0.16, 1, 0.3, 1] }, '--right-sidebar-width': { type: "spring", stiffness: 300, damping: 30 } }}
+    >
       <AnimatePresence>{toast && (
         <motion.div className="toast-container" initial={{ opacity:0,y:14,scale:0.9 }} animate={{ opacity:1,y:0,scale:1 }} exit={{ opacity:0,y:14 }}>
           <div className="toast">{toast}</div>
@@ -1057,7 +1394,11 @@ function MainApp({ user, onLogout }) {
         switchRoadmap={(id) => { switchRoadmap(id); setIsSidebarOpen(false); }}
         activeRoadmap={activeRoadmap}
         isOpen={isSidebarOpen}
-        isHidden={tab === 'roadmap'}
+        isHidden={false} 
+        isCollapsed={isSidebarCollapsed || !!detailTask}
+        userProfile={userProfile} 
+        openProfileModal={() => setIsProfileModalOpen(true)}
+        onLogout={onLogout}
       />
 
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden', gridColumn: 2, gridRow: '1 / -1' }}>
@@ -1075,7 +1416,7 @@ function MainApp({ user, onLogout }) {
         />
 
       <div className="app-content">
-        <AnimatePresence mode="popLayout">
+        <AnimatePresence>
         {/* ═══ ROADMAP VIEW ═══ */}
         {tab === "roadmap" ? (() => {
           const rmPrefix = activeRoadmap + ':';
@@ -1268,152 +1609,265 @@ function MainApp({ user, onLogout }) {
 
         /* ═══ HOME ═══ */
         : tab === "home" ? (
-          detailTask ? (
-            <TaskCenterView key="task-detail" detailTask={detailTask} TRACKS={TRACKS} activeTracks={activeTracks} activeResources={activeResources} RESOURCES={RESOURCES} closeDetail={() => setDetailTask(null)} fadeUp={fadeUp} doneMap={done} onToggleDone={toggle} />
-          ) : (
-          <motion.div className="page" key="home" {...fadeUp}>
+          <div style={{ display: 'flex', width: '100%', height: '100%', overflow: 'hidden' }}>
+            <motion.div 
+              className="page" 
+              key="home" 
+              style={{ 
+                flex: detailTask ? `0 0 ${taskNavWidth}px` : 1, 
+                borderRight: detailTask ? '1px solid var(--border)' : 'none',
+                overflowY: detailTask ? 'hidden' : 'auto',
+                overflowX: 'hidden',
+                resize: 'none',
+                minWidth: detailTask ? '0px' : '100%',
+                maxWidth: detailTask ? '100%' : '100%',
+                background: detailTask ? 'var(--bg2)' : 'transparent',
+                padding: 0,
+                display: detailTask ? 'flex' : 'block',
+                flexDirection: detailTask ? 'column' : 'unset',
+                height: '100%'
+              }} 
+              {...fadeUp}
+            >
             {/* ═══ ROADMAP SWITCHER ═══ */}
-            <HomeRoadmapSwitcher
-              joinedRoadmaps={joinedRoadmaps}
-              activeRoadmap={activeRoadmap}
-              ROADMAPS={ROADMAPS}
-              switchRoadmap={(rmId) => {
-                setActiveRoadmap(rmId);
-                try {
-                  const localKey = `vtask_user_${user}`;
-                  const existing = JSON.parse(localStorage.getItem(localKey) || '{}');
-                  localStorage.setItem(localKey, JSON.stringify({ ...existing, activeRoadmap: rmId }));
-                } catch(e) {}
-                try { setDoc(doc(db, "users", user), { activeRoadmap: rmId }, { merge: true }); } catch(e) {};
-              }}
-              haptic={haptic}
-            />
+            <div style={{ flexShrink: 0, padding: detailTask ? '16px 16px 0' : '16px 32px 0' }}>
+              <HomeRoadmapSwitcher
+                joinedRoadmaps={joinedRoadmaps}
+                activeRoadmap={activeRoadmap}
+                ROADMAPS={ROADMAPS}
+                switchRoadmap={(rmId) => {
+                  setActiveRoadmap(rmId);
+                  try {
+                    const localKey = `vtask_user_${user}`;
+                    const existing = JSON.parse(localStorage.getItem(localKey) || '{}');
+                    localStorage.setItem(localKey, JSON.stringify({ ...existing, activeRoadmap: rmId }));
+                  } catch(e) {}
+                  try { setDoc(doc(db, "users", user), { activeRoadmap: rmId }, { merge: true }); } catch(e) {};
+                }}
+                haptic={haptic}
+              />
+            </div>
             
-            <div className="dashboard-v2-grid">
-              <div className="main-col">
-                <div className="dashboard-v2-panel" style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-                  <div className="panel-header">
-                    <h2>Today's Tasks</h2>
-                    <div className="panel-actions">
-                      <input type="text" className="search-input" placeholder="Search here..." />
-                      <button className="dash-btn" onClick={() => switchTab("calendar")}><span style={{fontSize: 14}}>📅</span> Schedule</button>
-                    </div>
+              {!detailTask && (
+                <div style={{ padding: '16px 32px 32px', flexShrink: 0 }}>
+                  <div style={{ marginBottom: 24 }}>
+                    <h1 style={{ fontSize: 28, fontWeight: 700, margin: 0, color: 'var(--text)' }}>
+                      Good {new Date().getHours() < 12 ? 'Morning' : new Date().getHours() < 18 ? 'Afternoon' : 'Evening'}, {userProfile?.name?.split(' ')[0] || 'User'} {new Date().getHours() < 12 ? '☁️' : new Date().getHours() < 18 ? '☀️' : '🌙'}
+                    </h1>
                   </div>
-                  <div style={{ flex: 1, overflowY: 'auto' }}>
-                    <table className="tasks-table">
-                      <thead>
-                        <tr>
-                          <th>Task Name</th>
-                          <th>Project</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {actualTodayTasks.length === 0 && <tr><td colSpan="3" style={{textAlign:'center', color:'var(--sub)'}}>No tasks for today.</td></tr>}
-                        {actualTodayTasks.map((task, idx) => {
+                  <div style={{ background: 'var(--accent)', borderRadius: 24, padding: '28px 32px', color: '#fff', marginBottom: 28, position: 'relative', overflow: 'hidden', boxShadow: 'var(--shadow-md)' }}>
+                    <div style={{ position: 'relative', zIndex: 2, display: 'flex', flexDirection: 'column', gap: 16 }}>
+                      <div style={{ background: 'rgba(255,255,255,0.2)', width: 48, height: 48, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        {getLucideIcon('🚀')}
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
+                        <div style={{ fontSize: 16, fontWeight: 500, opacity: 0.9 }}>Your progress now</div>
+                        <div style={{ fontSize: 24, fontWeight: 700 }}>{activeRaw.length > 0 ? Math.round(Object.keys(done).filter(k => k.startsWith(activeRoadmap+':')).length / activeRaw.length * 100) : 0}%</div>
+                      </div>
+                      <div style={{ height: 6, background: 'rgba(255,255,255,0.3)', borderRadius: 4, overflow: 'hidden' }}>
+                        <motion.div initial={{ width: 0 }} animate={{ width: `${activeRaw.length > 0 ? Math.round(Object.keys(done).filter(k => k.startsWith(activeRoadmap+':')).length / activeRaw.length * 100) : 0}%` }} transition={{ duration: 1, ease: 'easeOut' }} style={{ height: '100%', background: '#fff', borderRadius: 4 }} />
+                      </div>
+                      <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+                        <div style={{ background: 'rgba(255,255,255,0.2)', padding: '6px 14px', borderRadius: 20, fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <CheckCircle size={14} /> {Object.keys(done).filter(k => k.startsWith(activeRoadmap+':')).length}/{activeRaw.length} Tasks Complete
+                        </div>
+                      </div>
+                    </div>
+                    {/* Decorative background circles */}
+                    <div style={{ position: 'absolute', top: -50, right: -50, width: 200, height: 200, background: 'rgba(255,255,255,0.1)', borderRadius: '50%' }} />
+                    <div style={{ position: 'absolute', bottom: -80, right: 40, width: 150, height: 150, background: 'rgba(255,255,255,0.1)', borderRadius: '50%' }} />
+                  </div>
+                </div>
+              )}
+
+              <div 
+                className={detailTask ? "" : "dashboard-v2-grid"} 
+                style={{ 
+                  display: detailTask ? 'flex' : 'grid', 
+                  flexDirection: detailTask ? 'column' : 'unset',
+                  gridTemplateColumns: detailTask ? '1fr' : '1fr 1fr', 
+                  gap: 24, 
+                  marginBottom: detailTask ? 0 : 24, 
+                  padding: detailTask ? '0 16px 16px' : '0 32px',
+                  flex: detailTask ? 1 : 'none',
+                  overflow: 'hidden'
+                }}
+              >
+                  {/* TASKS LIST */}
+                  <div 
+                    className={detailTask ? "" : "animated-border-card"} 
+                    style={{ 
+                      display: 'flex', 
+                      flexDirection: 'column', 
+                      padding: detailTask ? '16px 0 0' : '28px 32px', 
+                      height: detailTask ? '100%' : 420,
+                      background: detailTask ? 'transparent' : undefined,
+                      border: detailTask ? 'none' : undefined,
+                      boxShadow: detailTask ? 'none' : undefined
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+                      <div style={{ display: 'flex', background: 'var(--card)', borderRadius: 20, padding: 4, gap: 4, border: '1px solid var(--border-light)' }}>
+                        {['Recent', 'Today', 'Upcoming'].map(t => (
+                          <button 
+                            key={t}
+                            className="dash-btn interactable" 
+                            onClick={() => { haptic(); setHomeTab(t); }}
+                            style={homeTab === t ? { background: 'var(--accent)', color: '#fff', border: 'none', padding: '6px 16px', boxShadow: 'var(--shadow-accent)', fontSize: 13, fontWeight: 600 } : { background: 'transparent', border: 'none', boxShadow: 'none', padding: '6px 16px', fontSize: 13, fontWeight: 600, color: 'var(--sub)' }}
+                          >
+                            {t}
+                          </button>
+                        ))}
+                      </div>
+                      <div style={{ display: 'flex', gap: 12 }}>
+                        <input type="text" className="search-input" placeholder="Search..." style={{ width: 120 }} />
+                        <button className="dash-btn interactable" onClick={() => switchTab("calendar")}>📅</button>
+                      </div>
+                    </div>
+                    <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 12, paddingRight: 16 }}>
+                      {(() => {
+                        let displayTasks = actualTodayTasks;
+                        if (homeTab === 'Recent') {
+                          // Show recently completed tasks for active roadmap
+                          displayTasks = combinedTasks.filter(t => !!done[t.id]).slice(-10).reverse();
+                        } else if (homeTab === 'Upcoming') {
+                          displayTasks = upcomingTasks.slice(0, 10);
+                        }
+                        
+                        if (displayTasks.length === 0) return <div style={{textAlign:'center', color:'var(--sub)', padding: '24px 0'}}>No tasks for {homeTab.toLowerCase()}.</div>;
+                        
+                        return displayTasks.map((task, idx) => {
                           const tr = (activeTracks[task.track] || TRACKS[task.track] || TRACKS[0]);
                           const isDone = !!done[task.id];
                           return (
-                            <tr key={task.id} onClick={() => setDetailTask(task)} style={{ opacity: isDone ? 0.5 : 1 }}>
-                              <td>
-                                <div className="task-name-cell">
-                                  <div className="folder-icon" style={{ background: isDone ? 'var(--glass)' : `${tr.color}22`, color: isDone ? 'var(--sub)' : tr.color }}>{isDone ? '✅' : '📁'}</div>
-                                  <span style={{ textDecoration: isDone ? 'line-through' : 'none', fontWeight: 600, color: isDone ? 'var(--sub)' : 'var(--text)' }}>{task.topic}</span>
-                                </div>
-                              </td>
-                              <td>
-                                <div className="project-badge">
-                                  <div className="project-dot" style={{ background: tr.color }}></div>
-                                  {tr.label}
-                                </div>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              </div>
-
-              <div className="side-col">
-                <div className="dashboard-v2-panel" style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-                  <div className="panel-header" style={{ marginBottom: 12 }}>
-                    <h2>Performance</h2>
-                  </div>
-                  <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <Heatmap doneMap={done} onDateClick={(dateStr) => setSelectedActivityDate(dateStr)} />
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="dashboard-v2-panel" style={{ marginTop: 24, marginBottom: 32 }}>
-              <div className="panel-header">
-                <h2>Live Projects</h2>
-                    <button className="dash-btn" onClick={() => {
-                      const name = prompt("Enter Project Name:");
-                      if (name) {
-                        const newProj = { id: Date.now().toString(), name, progress: 0, due: "TBD", owner: user || "You", color: ["#A78BFA", "#6EE7B7", "#60A5FA", "#F87171", "#FBBF24"][(liveProjects.length) % 5] };
-                        const updated = [...liveProjects, newProj];
-                        setLiveProjects(updated);
-                        const localKey = `vtask_user_${user}`;
-                        const existing = JSON.parse(localStorage.getItem(localKey) || '{}');
-                        localStorage.setItem(localKey, JSON.stringify({ ...existing, liveProjects: updated }));
-                        try { setDoc(doc(db, "users", user), { liveProjects: updated }, { merge: true }); } catch(e) {}
-                      }
-                    }}>+ Add Project</button>
-                  </div>
-                  <table className="tasks-table">
-                    <thead>
-                      <tr>
-                        <th>Project Name</th>
-                        <th>Progress</th>
-                        <th>Due Date</th>
-                        <th>Owner</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {liveProjects.length === 0 && <tr><td colSpan="4" style={{textAlign:'center', color:'var(--sub)'}}>No live projects. Add one!</td></tr>}
-                      {liveProjects.map(proj => (
-                        <tr key={proj.id} onClick={() => {
-                            const newProg = prompt("Enter new progress %:", proj.progress);
-                            if (newProg !== null && !isNaN(newProg)) {
-                                const updated = liveProjects.map(p => p.id === proj.id ? { ...p, progress: parseInt(newProg) } : p);
-                                setLiveProjects(updated);
-                                const localKey = `vtask_user_${user}`;
-                                const existing = JSON.parse(localStorage.getItem(localKey) || '{}');
-                                localStorage.setItem(localKey, JSON.stringify({ ...existing, liveProjects: updated }));
-                                try { setDoc(doc(db, "users", user), { liveProjects: updated }, { merge: true }); } catch(e) {}
-                            }
-                        }}>
-                          <td>
-                            <div className="task-name-cell">
-                              <div className="folder-icon" style={{ background: `${proj.color}22`, color: proj.color }}>📁</div>
-                              <span style={{ fontWeight: 600 }}>{proj.name}</span>
+                            <motion.div 
+                              key={task.id} 
+                              className="task-card-v2"
+                              onClick={() => setDetailTask(task)} 
+                              style={{ 
+                                opacity: 1, 
+                                margin: 0, 
+                                padding: '16px', 
+                                display: 'flex', 
+                                alignItems: 'center', 
+                                gap: 16,
+                                borderRadius: 16,
+                                border: detailTask?.id === task.id ? '2px solid var(--accent)' : '1px solid transparent',
+                                background: detailTask?.id === task.id ? 'var(--card-hover)' : 'var(--card)',
+                                cursor: 'pointer',
+                                flexShrink: 0
+                              }}
+                              initial={{ opacity: 0, y: 10 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              transition={{ delay: idx * 0.04, duration: 0.3 }}
+                            >
+                            <div style={{ width: 48, height: 48, borderRadius: '50%', background: `${tr.color}22`, color: tr.color, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                              {getLucideIcon('📁')}
                             </div>
-                          </td>
-                          <td>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                              <div className="pbar" style={{ width: 80, height: 6, background: 'var(--glass)', borderRadius: 3 }}>
-                                <div className="pfill" style={{ width: `${proj.progress}%`, background: proj.color, borderRadius: 3, height: '100%' }}></div>
-                              </div>
-                              <span style={{ fontSize: 12, color: 'var(--sub)' }}>{proj.progress}%</span>
+                            <div style={{ flex: 1 }}>
+                              <div style={{ fontWeight: 600, fontSize: 16, color: 'var(--text)', marginBottom: 4 }}>{task.topic}</div>
+                              <div style={{ fontSize: 13, color: 'var(--sub)' }}>{tr.label} • {task.duration || 1}h</div>
                             </div>
-                          </td>
-                          <td style={{ color: 'var(--sub)', fontSize: 12 }}>{proj.due}</td>
-                          <td style={{ color: 'var(--sub)', fontSize: 12 }}>{proj.owner}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                              <button 
+                                className="check-btn interactable"
+                                onClick={(e) => { e.stopPropagation(); toggle(task.id); }}
+                                style={{
+                                  width: 32, height: 32, borderRadius: '50%',
+                                  background: isDone ? 'var(--accent)' : 'var(--card2)',
+                                  border: isDone ? 'none' : '2px solid var(--border)',
+                                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                  color: isDone ? '#fff' : 'transparent',
+                                  cursor: 'pointer'
+                                }}
+                              >
+                                <CheckCircle size={18} />
+                              </button>
+                            </div>
+                          </motion.div>
+                        );
+                      })
+                      })()}
+                    </div>
+                  </div>
 
-          {/* ═══ DISCOVER ROADMAPS ═══ */}
+                  {/* PERFORMANCE HEATMAP */}
+                  {!detailTask && (
+                    <div className="animated-border-card" style={{ display: 'flex', flexDirection: 'column', padding: '24px 32px', height: 420 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                        <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: 'var(--text)' }}>Activity Map</h3>
+                      </div>
+                      <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', overflowX: 'auto' }}>
+                        <Heatmap doneMap={done} onDateClick={(dateStr) => { setSelectedActivityDate(dateStr); switchTab("calendar"); }} />
+                      </div>
+                    </div>
+                  )}
+
+              </div>
           </motion.div>
-          )
+          
+          {detailTask && taskNavWidth > 0 && (
+            <div 
+              onMouseDown={startTaskNavResize}
+              style={{
+                width: '6px',
+                cursor: 'col-resize',
+                background: 'transparent',
+                position: 'relative',
+                zIndex: 100,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}
+            >
+              <div style={{ width: 2, height: 30, background: 'var(--border-light)', borderRadius: 2 }} />
+            </div>
+          )}
+
+          {/* DETAIL PANE */}
+          {detailTask && (
+            <div 
+              style={{ 
+                flex: 1, 
+                overflowY: 'auto', 
+                background: 'var(--bg)', 
+                position: 'relative'
+              }}
+            >
+              {taskNavWidth === 0 && (
+                <button 
+                  onClick={() => setTaskNavWidth(350)}
+                  style={{ position: 'absolute', left: 0, top: '50%', transform: 'translateY(-50%)', zIndex: 110, background: 'var(--card)', border: '1px solid var(--border)', borderLeft: 'none', padding: '16px 8px', borderRadius: '0 8px 8px 0', cursor: 'pointer', color: 'var(--sub)' }}
+                >
+                  ▶
+                </button>
+              )}
+              {rightWidth === 0 && (
+                <button 
+                  onClick={() => setRightWidth(350)}
+                  style={{ position: 'absolute', right: 0, top: '50%', transform: 'translateY(-50%)', zIndex: 110, background: 'var(--card)', border: '1px solid var(--border)', borderRight: 'none', padding: '16px 8px', borderRadius: '8px 0 0 8px', cursor: 'pointer', color: 'var(--sub)' }}
+                >
+                  ◀
+                </button>
+              )}
+              <TaskCenterView 
+                key="task-detail" 
+                detailTask={detailTask} 
+                TRACKS={TRACKS} 
+                activeTracks={activeTracks} 
+                activeResources={activeResources} 
+                RESOURCES={RESOURCES} 
+                closeDetail={() => setDetailTask(null)} 
+                fadeUp={fadeUp} 
+                doneMap={done} 
+                onToggleDone={toggle} 
+              />
+            </div>
+          )}
+          </div>
         )
         : tab === 'discover' ? (
-            <motion.div className="tab-pane active" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} style={{ maxWidth: 900, margin: '0 auto', paddingBottom: 100 }}>
+            <motion.div key="discover" className="tab-pane active" {...fadeUp} style={{ maxWidth: 900, margin: '0 auto', paddingBottom: 100 }}>
               <div className="section-header" style={{ marginTop: 28 }}><h2>Discover Roadmaps</h2></div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 16 }}>
               {ROADMAPS.map((rm, idx) => {
@@ -1429,11 +1883,13 @@ function MainApp({ user, onLogout }) {
                     style={{
                       background: `linear-gradient(135deg, ${rm.color}11 0%, ${rm.color}06 100%)`,
                       border: `1px solid ${isActive ? rm.color : rm.color + '33'}`,
-                      borderRadius: 18, padding: '20px', cursor: 'pointer',
+                      borderRadius: 18, padding: '20px', cursor: rm.isComingSoon ? 'default' : 'pointer',
                       position: 'relative', overflow: 'hidden',
+                      opacity: rm.isComingSoon ? 0.6 : 1,
                       transition: 'all 0.3s cubic-bezier(0.16, 1, 0.3, 1)'
                     }}
                     onClick={() => {
+                      if (rm.isComingSoon) return;
                       switchRoadmap(rm.id);
                       switchTab("roadmap");
                     }}>
@@ -1443,7 +1899,7 @@ function MainApp({ user, onLogout }) {
                         background: rm.color + '1A',
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
                         fontSize: 24, flexShrink: 0
-                      }}>{rm.icon}</div>
+                      }}>{getLucideIcon(rm.icon)}</div>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
                           <span style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)' }}>{rm.label}</span>
@@ -1461,16 +1917,20 @@ function MainApp({ user, onLogout }) {
                             }}>{tag}</span>
                           ))}
                         </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                          <div className="pbar" style={{ flex: 1, marginTop: 0, height: 5 }}>
-                            <div className="pfill" style={{ width: `${rmPct}%`, background: rm.color }} />
+                        {rm.isComingSoon ? (
+                          <div style={{ height: 17, marginBottom: 0 }}></div>
+                        ) : (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                            <div className="pbar" style={{ flex: 1, marginTop: 0, height: 5 }}>
+                              <div className="pfill" style={{ width: `${rmPct}%`, background: rm.color }} />
+                            </div>
+                            <span style={{ fontSize: 11, color: rm.color, fontWeight: 600, flexShrink: 0 }}>{rmPct}%</span>
                           </div>
-                          <span style={{ fontSize: 11, color: rm.color, fontWeight: 600, flexShrink: 0 }}>{rmPct}%</span>
-                        </div>
+                        )}
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 6 }}>
-                          <span style={{ fontSize: 11, color: 'var(--sub)' }}>{rm.totalDays} days · {rm.difficulty}</span>
-                          <span style={{ fontSize: 12, fontWeight: 600, color: isJoined ? rm.color : 'var(--sub)' }}>
-                            {isJoined ? (isActive ? 'Currently Active' : 'Switch →') : 'Join →'}
+                          <span style={{ fontSize: 11, color: 'var(--sub)' }}>{rm.totalDays > 0 ? `${rm.totalDays} days · ` : ''}{rm.difficulty}</span>
+                          <span style={{ fontSize: 12, fontWeight: 600, color: rm.isComingSoon ? rm.color : (isJoined ? rm.color : 'var(--sub)') }}>
+                            {rm.isComingSoon ? 'Coming Soon ⏳' : (isJoined ? (isActive ? 'Currently Active' : 'Switch →') : 'Join →')}
                           </span>
                         </div>
                       </div>
@@ -1486,12 +1946,53 @@ function MainApp({ user, onLogout }) {
         : tab === "calendar" ? (
           detailTask ? (
             <TaskCenterView key="task-detail" detailTask={detailTask} TRACKS={TRACKS} activeTracks={activeTracks} activeResources={activeResources} RESOURCES={RESOURCES} closeDetail={() => setDetailTask(null)} fadeUp={fadeUp} doneMap={done} onToggleDone={toggle} />
+          ) : selectedActivityDate ? (
+            (() => {
+              const dateObj = new Date(selectedActivityDate);
+              const dayDowObj = dateObj.getDay();
+              const mappedDow = dayDowObj === 0 ? 6 : dayDowObj - 1;
+              
+              let startD = userProfile?.startDate ? new Date(userProfile.startDate) : new Date();
+              startD.setHours(0,0,0,0);
+              const diffTime = Math.abs(dateObj - startD);
+              const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+              const targetWeek = Math.floor(diffDays / 7) + 1;
+              const targetDay = (diffDays % 7) + 1;
+
+              const dateTasks = combinedTasks.filter(t => {
+                if (t.isCustom) {
+                  if (t.rmId !== activeRoadmap) return false;
+                  if (t.scheduleType === 'date') return t.date === selectedActivityDate;
+                  if (t.scheduleType === 'repeat') return t.repeatDays && t.repeatDays.includes(mappedDow);
+                  return false;
+                }
+                return t.week === targetWeek && t.day === targetDay && assignedTracks.includes(t.track);
+              });
+
+              const displayTasks = dateTasks.length > 0 ? dateTasks : actualTodayTasks;
+
+              return (
+                <DailyScheduleView
+                  dateStr={selectedActivityDate}
+                  onClose={() => setSelectedActivityDate(null)}
+                  tasks={displayTasks}
+                  done={done}
+                  toggle={toggle}
+                  TRACKS={TRACKS}
+                  activeTracks={activeTracks}
+                />
+              );
+            })()
           ) : (
-          <GanttCalendar 
-            allTasks={combinedTasks} 
-            doneMap={done} 
-            onNodeClick={(task) => { setDetailTask(task); }} 
-          />
+          <motion.div className="page" key="calendar" {...fadeUp} style={{ padding: '24px 32px' }}>
+            <GanttCalendar 
+              allTasks={combinedTasks} 
+              doneMap={done} 
+              onNodeClick={(task) => { setDetailTask(task); }} 
+              startDate={userProfile?.startDate}
+              onDateClick={(dateStr) => setSelectedActivityDate(dateStr)}
+            />
+          </motion.div>
           )
         )
 
@@ -1519,7 +2020,7 @@ function MainApp({ user, onLogout }) {
                 const tr = (activeTracks[task.track] || TRACKS[task.track] || TRACKS[0]), isDone = !!done[task.id];
                 return (
                   <motion.div key={task.id} className="notif-item" initial={{ opacity:0,x:-8 }} animate={{ opacity:1,x:0 }} transition={{ delay: idx*0.06 }}>
-                    <div className="avatar" style={{ background: tr.bg }}>{tr.icon}</div>
+                    <div className="avatar" style={{ background: tr.bg }}>{getLucideIcon(tr.icon)}</div>
                     <div className="notif-info"><div className="notif-title">{task.topic}</div><div className="notif-sub">{tr.sublabel} · {task.hrs}h</div></div>
                     <span className={`status-chip ${isDone ? "done" : "pending"}`}>{isDone ? "Done" : "Pending"}</span>
                   </motion.div>
@@ -1533,7 +2034,7 @@ function MainApp({ user, onLogout }) {
               const pct = allTr.length ? Math.round(doneTr/allTr.length*100) : 0;
               return (
                 <motion.div key={tr.id} className="notif-item" initial={{ opacity:0,y:8 }} animate={{ opacity:1,y:0 }} transition={{ delay:(idx+3)*0.06 }}>
-                  <div className="avatar" style={{ background: tr.bg }}>{tr.icon}</div>
+                  <div className="avatar" style={{ background: tr.bg }}>{getLucideIcon(tr.icon)}</div>
                   <div className="notif-info" style={{ flex:1 }}>
                     <div className="notif-title">{tr.label}</div>
                     <div className="pbar" style={{ margin:"6px 0 4px" }}><div className="pfill" style={{ width:`${pct}%`,background:tr.color }} /></div>
@@ -1629,7 +2130,7 @@ function MainApp({ user, onLogout }) {
               {[{ label:"Completed",value:totalDone,icon:"✅",color:"var(--green)" },{ label:"Remaining",value:totalAll-totalDone,icon:"📋",color:"var(--yellow)" },{ label:"This Week",value:`${wkDone}/${wkAll.length}`,icon:"📅",color:"var(--purple)" },{ label:"Today",value:`${todayDone}/${actualTodayTasks.length}`,icon:"☀️",color:"var(--accent)" }]
                 .map((s,i) => (
                   <motion.div key={s.label} className="stat-card interactable" initial={{ opacity:0,scale:0.9 }} animate={{ opacity:1,scale:1 }} transition={{ delay:i*0.06 }}>
-                    <div className="stat-icon">{s.icon}</div><div className="stat-value" style={{ color:s.color }}>{s.value}</div><div className="stat-label">{s.label}</div>
+                    <div className="stat-icon">{getLucideIcon(s.icon)}</div><div className="stat-value" style={{ color:s.color }}>{s.value}</div><div className="stat-label">{s.label}</div>
                   </motion.div>
                 ))}
             </div>
@@ -1653,7 +2154,7 @@ function MainApp({ user, onLogout }) {
                     color: isActive ? "#0A0A0F" : t.color,
                     fontWeight: 600, cursor: "pointer", transition: "all 0.2s"
                   }}>
-                    {t.icon} {t.label} {isActive ? "✓" : "+"}
+                    {getLucideIcon(t.icon)} {t.label} {isActive ? "✓" : "+"}
                   </div>
                 );
               })}
@@ -1670,7 +2171,7 @@ function MainApp({ user, onLogout }) {
                     else { joinRoadmap(rm.id); switchRoadmap(rm.id); }
                   }} style={{ border: isJoined ? `1px solid ${rm.color}44` : undefined }}>
                     <div className="menu-left">
-                      <span className="menu-icon">{rm.icon}</span>
+                      <span className="menu-icon">{getLucideIcon(rm.icon)}</span>
                       <div>
                         <span style={{ fontWeight: 600 }}>{rm.label}</span>
                         <div style={{ fontSize: 11, color: 'var(--sub)', marginTop: 2 }}>{rm.totalDays} days · {rm.difficulty}</div>
@@ -1687,7 +2188,7 @@ function MainApp({ user, onLogout }) {
             <h3 className="section-title">General</h3>
             <div className="menu-item interactable" style={{ cursor: "default", flexDirection: "column", alignItems: "flex-start", gap: 8 }}>
               <div className="menu-left" style={{ width: "100%" }}>
-                <span className="menu-icon">📧</span>
+                <span className="menu-icon">{getLucideIcon("📧")}</span>
                 <input type="email" placeholder="Email for alerts..." value={alertEmail} 
                   onChange={e => {
                     setAlertEmail(e.target.value);
@@ -1702,7 +2203,7 @@ function MainApp({ user, onLogout }) {
             ]
               .map(item => (
                   <div key={item.label} className="menu-item interactable" onClick={() => { haptic(); item.action?.(); }}>
-                  <div className="menu-left"><span className="menu-icon">{item.icon}</span><span>{item.label}</span></div><span className="menu-arrow">›</span>
+                  <div className="menu-left"><span className="menu-icon">{getLucideIcon(item.icon)}</span><span>{item.label}</span></div><span className="menu-arrow">›</span>
                 </div>
               ))}
           </motion.div>
@@ -1729,20 +2230,25 @@ function MainApp({ user, onLogout }) {
               }} 
             />
           )}
-          {!isOverlayMode && (
+          {!isOverlayMode && rightWidth > 0 && (
             <div 
-              onMouseDown={startResize}
+              onMouseDown={startRightResize}
               style={{
-                width: '5px',
+                width: '6px',
                 cursor: 'col-resize',
                 background: 'transparent',
                 position: 'absolute',
                 right: computedRightWidth - 2,
                 top: 0,
                 bottom: 0,
-                zIndex: 100
+                zIndex: 100,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
               }}
-            />
+            >
+              <div style={{ width: 2, height: 30, background: 'var(--border-light)', borderRadius: 2 }} />
+            </div>
           )}
           <SidebarRight 
             key="sidebar-right-panel"
@@ -1769,19 +2275,57 @@ function MainApp({ user, onLogout }) {
             onOpenTaskModal={() => setIsTaskModalOpen(true)}
             onOpenMeetingModal={() => setIsMeetingModalOpen(true)}
             meetings={meetings}
+            onEditCustomTask={(task) => {
+              setEditingTask(task);
+              setIsTaskModalOpen(true);
+            }}
+            onDeleteCustomTask={handleDeleteCustomTask}
           />
         </>
       )}
+
+      {(() => {
+        if (!selectedActivityDate) return null;
+        
+        const dateObj = new Date(selectedActivityDate);
+        const dayDowObj = dateObj.getDay();
+        const mappedDow = dayDowObj === 0 ? 6 : dayDowObj - 1;
+        
+        let startD = userProfile?.startDate ? new Date(userProfile.startDate) : new Date();
+        startD.setHours(0,0,0,0);
+        const diffTime = Math.abs(dateObj - startD);
+        const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+        const targetWeek = Math.floor(diffDays / 7) + 1;
+        const targetDay = (diffDays % 7) + 1;
+
+        const dateTasks = combinedTasks.filter(t => {
+          if (t.isCustom) {
+            if (t.rmId !== activeRoadmap) return false;
+            if (t.scheduleType === 'date') return t.date === selectedActivityDate;
+            if (t.scheduleType === 'repeat') return t.repeatDays && t.repeatDays.includes(mappedDow);
+            return false;
+          }
+          return t.week === targetWeek && t.day === targetDay && assignedTracks.includes(t.track);
+        });
+
+        // Fallback to today's tasks if somehow empty (prototype visualization)
+        const displayTasks = dateTasks.length > 0 ? dateTasks : actualTodayTasks;
+
+        return (
+          <DailyScheduleView
+            dateStr={selectedActivityDate}
+            onClose={() => setSelectedActivityDate(null)}
+            tasks={displayTasks}
+            done={done}
+            toggle={toggle}
+            TRACKS={TRACKS}
+            activeTracks={activeTracks}
+          />
+        );
+      })()}
       </AnimatePresence>
 
-      <nav className="bottom-nav">
-        <GradientButtonGroupBottom
-          navItems={navItems}
-          activeTab={tab}
-          onTabChange={switchTab}
-          onCreate={openCreate}
-        />
-      </nav>
+
 
       {isProfileModalOpen && (
         <ProfileModal 
@@ -1793,33 +2337,58 @@ function MainApp({ user, onLogout }) {
             persist({ userProfile: up });
             setIsProfileModalOpen(false);
           }} 
+          onLogout={onLogout}
         />
       )}
 
+      <AnimatePresence>
       {isTaskModalOpen && (
         <TaskModal
-          onClose={() => setIsTaskModalOpen(false)}
-          onSave={(taskData) => {
-            const newTask = {
-              id: `custom_${Date.now()}`,
-              topic: taskData.name,
-              track: parseInt(taskData.track) || 0,
-              week: parseInt(taskData.week) || currentWeekIdx,
-              day: parseInt(taskData.day) || rawDay,
-              duration: taskData.duration,
-              desc: taskData.desc,
-              isCustom: true,
-              rmId: activeRoadmap
-            };
-            const updated = [...customTasks, newTask];
-            setCustomTasks(updated);
-            persist({ customTasks: updated });
+          editTask={editingTask}
+          onClose={() => {
             setIsTaskModalOpen(false);
+            setEditingTask(null);
+          }}
+          onSave={(taskData) => {
+            if (editingTask) {
+              handleUpdateCustomTask(editingTask.id, {
+                topic: taskData.name,
+                track: taskData.track !== undefined ? parseInt(taskData.track) : 0,
+                desc: taskData.desc,
+                scheduleType: taskData.scheduleType,
+                date: taskData.date,
+                repeatDays: taskData.selectedDays,
+                priority: taskData.priority
+              });
+            } else {
+              const newTask = {
+                id: `custom_${Date.now()}`,
+                topic: taskData.name,
+                track: taskData.track !== undefined ? parseInt(taskData.track) : 0,
+                duration: taskData.duration,
+                desc: taskData.desc,
+                isCustom: true,
+                rmId: activeRoadmap,
+                scheduleType: taskData.scheduleType,
+                date: taskData.date,
+                repeatDays: taskData.selectedDays,
+                priority: taskData.priority,
+                // fallbacks for old checks just in case
+                week: currentWeekIdx,
+                day: currentDayIdx
+              };
+              const updated = [...customTasks, newTask];
+              setCustomTasks(updated);
+              persist({ customTasks: updated });
+            }
+            setIsTaskModalOpen(false);
+            setEditingTask(null);
           }}
           TRACKS={TRACKS}
           activeTracks={activeTracks}
         />
       )}
+      </AnimatePresence>
 
       {isMeetingModalOpen && (
         <MeetingModal
@@ -1832,6 +2401,18 @@ function MainApp({ user, onLogout }) {
           }}
         />
       )}
-    </div>
+
+      {showOnboarding && (
+        <OnboardingModal
+          onClose={() => setShowOnboarding(false)}
+          onComplete={() => {
+            const up = { ...userProfile, onboardingCompleted: true };
+            setUserProfile(up);
+            persist({ userProfile: up });
+            setShowOnboarding(false);
+          }}
+        />
+      )}
+    </motion.div>
   );
 }

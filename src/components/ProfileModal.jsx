@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 
-export default function ProfileModal({ userProfile, onClose, onSave }) {
+export default function ProfileModal({ userProfile, onClose, onSave, onLogout }) {
   const [profile, setProfile] = useState({
     name: userProfile?.name || '',
     email: userProfile?.email || '',
@@ -9,7 +9,7 @@ export default function ProfileModal({ userProfile, onClose, onSave }) {
   });
 
   return (
-    <div className="modal-overlay" onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+    <div className="modal-overlay" onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <motion.div 
         className="modal" 
         onClick={e => e.stopPropagation()}
@@ -56,9 +56,12 @@ export default function ProfileModal({ userProfile, onClose, onSave }) {
           </div>
         </div>
 
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, marginTop: 32 }}>
-          <button onClick={onClose} style={{ padding: '10px 16px', borderRadius: 8, background: 'transparent', color: 'var(--sub)', border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: 14 }}>Cancel</button>
-          <button onClick={() => onSave(profile)} style={{ padding: '10px 20px', borderRadius: 8, background: 'var(--accent)', color: '#fff', border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: 14 }}>Save Changes</button>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 32 }}>
+          <button onClick={onLogout} style={{ padding: '10px 16px', borderRadius: 8, background: 'rgba(248, 113, 113, 0.1)', color: 'var(--red)', border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: 14 }}>Logout</button>
+          <div style={{ display: 'flex', gap: 12 }}>
+            <button onClick={onClose} style={{ padding: '10px 16px', borderRadius: 8, background: 'transparent', color: 'var(--sub)', border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: 14 }}>Cancel</button>
+            <button onClick={() => onSave(profile)} style={{ padding: '10px 20px', borderRadius: 8, background: 'var(--accent)', color: '#fff', border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: 14 }}>Save Changes</button>
+          </div>
         </div>
       </motion.div>
     </div>

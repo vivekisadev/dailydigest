@@ -1,10 +1,28 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 
-export default function TaskModal({ onClose, onSave, activeTracks, TRACKS }) {
-  const [newTask, setNewTask] = useState({ name: '', desc: '', track: activeTracks?.[0]?.id || TRACKS?.[0]?.id || 0, priority: 'Medium', week: 1, day: 0 });
+export default function TaskModal({ onClose, onSave, activeTracks, TRACKS, editTask }) {
+  const getInitialState = () => {
+    if (editTask) {
+      return {
+        id: editTask.id,
+        name: editTask.topic || '',
+        desc: editTask.desc || '',
+        track: editTask.track || 0,
+        priority: editTask.priority || 'Medium',
+        scheduleType: editTask.scheduleType || 'date',
+        date: editTask.date || new Date().toISOString().split('T')[0],
+        selectedDays: editTask.repeatDays || [0]
+      };
+    }
+    return { 
+      name: '', desc: '', track: activeTracks?.[0]?.id || TRACKS?.[0]?.id || 0, 
+      priority: 'Medium', scheduleType: 'date', date: new Date().toISOString().split('T')[0], selectedDays: [0] 
+    };
+  };
+
+  const [newTask, setNewTask] = useState(getInitialState());
   
-  const DAYS = ["Day 1 (Mon)", "Day 2 (Tue)", "Day 3 (Wed)", "Day 4 (Thu)", "Day 5 (Fri)", "Day 6 (Sat)", "Day 7 (Sun)"];
   const maxWeeks = 12; // default to 12 weeks for generic custom task
 
   // Fallback to TRACKS if activeTracks is not available
@@ -21,7 +39,7 @@ export default function TaskModal({ onClose, onSave, activeTracks, TRACKS }) {
         style={{ width: '100%', maxWidth: 450, background: 'var(--card-solid)', borderRadius: 16, padding: 24, boxShadow: '0 24px 48px rgba(0,0,0,0.2)' }}
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-          <h2 style={{ fontSize: 20, fontWeight: 700, color: 'var(--text)', margin: 0 }}>Create New Task</h2>
+          <h2 style={{ fontSize: 20, fontWeight: 700, color: 'var(--text)', margin: 0 }}>{editTask ? 'Edit Task' : 'Create New Task'}</h2>
           <button onClick={onClose} style={{ background: 'transparent', border: 'none', color: 'var(--sub)', fontSize: 20, cursor: 'pointer' }}>✕</button>
         </div>
 
@@ -48,25 +66,98 @@ export default function TaskModal({ onClose, onSave, activeTracks, TRACKS }) {
 
           <div style={{ display: 'flex', gap: 12 }}>
             <div style={{ flex: 1 }}>
-              <label style={{ fontSize: 13, color: 'var(--sub)', marginBottom: 8, display: 'block', fontWeight: 600 }}>Week</label>
-              <select 
-                value={newTask.week} 
-                onChange={e => setNewTask({ ...newTask, week: parseInt(e.target.value) })}
-                style={{ width: '100%', padding: '12px 16px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg2)', color: 'var(--text)', fontSize: 14, outline: 'none' }}
-              >
-                {[...Array(maxWeeks)].map((_, i) => <option key={i+1} value={i+1}>Week {i+1}</option>)}
-              </select>
+              <label style={{ fontSize: 13, color: 'var(--sub)', marginBottom: 8, display: 'block', fontWeight: 600 }}>Schedule Type</label>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button 
+                  onClick={() => setNewTask({ ...newTask, scheduleType: 'date' })}
+                  style={{ 
+                    flex: 1, padding: '10px', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                    background: newTask.scheduleType === 'date' ? 'var(--accent)' : 'var(--glass)',
+                    color: newTask.scheduleType === 'date' ? '#fff' : 'var(--text)',
+                    border: newTask.scheduleType === 'date' ? '1px solid transparent' : '1px solid var(--border)',
+                    transition: 'all 0.2s'
+                  }}
+                >
+                  One-Time
+                </button>
+                <button 
+                  onClick={() => setNewTask({ ...newTask, scheduleType: 'repeat' })}
+                  style={{ 
+                    flex: 1, padding: '10px', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                    background: newTask.scheduleType === 'repeat' ? 'var(--accent)' : 'var(--glass)',
+                    color: newTask.scheduleType === 'repeat' ? '#fff' : 'var(--text)',
+                    border: newTask.scheduleType === 'repeat' ? '1px solid transparent' : '1px solid var(--border)',
+                    transition: 'all 0.2s'
+                  }}
+                >
+                  Repeating
+                </button>
+              </div>
             </div>
-            <div style={{ flex: 1 }}>
-              <label style={{ fontSize: 13, color: 'var(--sub)', marginBottom: 8, display: 'block', fontWeight: 600 }}>Day</label>
-              <select 
-                value={newTask.day} 
-                onChange={e => setNewTask({ ...newTask, day: parseInt(e.target.value) })}
-                style={{ width: '100%', padding: '12px 16px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg2)', color: 'var(--text)', fontSize: 14, outline: 'none' }}
-              >
-                {DAYS.map((d, i) => <option key={i} value={i}>{d}</option>)}
-              </select>
-            </div>
+          </div>
+
+          <div>
+            {newTask.scheduleType === 'date' ? (
+              <div style={{ flex: 1 }}>
+                <label style={{ fontSize: 13, color: 'var(--sub)', marginBottom: 8, display: 'block', fontWeight: 600 }}>Date</label>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <input 
+                    type="date"
+                    value={newTask.date}
+                    onChange={e => setNewTask({ ...newTask, date: e.target.value })}
+                    style={{ flex: 1, padding: '10.5px 16px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg2)', color: 'var(--text)', fontSize: 14, outline: 'none' }}
+                  />
+                  <button 
+                    onClick={() => setNewTask({ ...newTask, date: new Date().toISOString().split('T')[0] })}
+                    style={{ padding: '0 16px', borderRadius: 8, background: 'var(--glass)', color: 'var(--text)', border: '1px solid var(--border)', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}
+                  >
+                    Today
+                  </button>
+                  <button 
+                    onClick={() => {
+                      const tmrw = new Date();
+                      tmrw.setDate(tmrw.getDate() + 1);
+                      setNewTask({ ...newTask, date: tmrw.toISOString().split('T')[0] });
+                    }}
+                    style={{ padding: '0 16px', borderRadius: 8, background: 'var(--glass)', color: 'var(--text)', border: '1px solid var(--border)', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}
+                  >
+                    Tomorrow
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div style={{ flex: 1 }}>
+                <label style={{ fontSize: 13, color: 'var(--sub)', marginBottom: 12, display: 'block', fontWeight: 600 }}>Select Days</label>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  {["M", "T", "W", "T", "F", "S", "S"].map((d, i) => {
+                    const isSelected = newTask.selectedDays.includes(i);
+                    return (
+                      <button 
+                        key={i}
+                        onClick={() => {
+                          const newDays = isSelected 
+                            ? newTask.selectedDays.filter(day => day !== i)
+                            : [...newTask.selectedDays, i];
+                          if (newDays.length > 0) {
+                            setNewTask({ ...newTask, selectedDays: newDays });
+                          }
+                        }}
+                        style={{ 
+                          width: 40, height: 40, flexShrink: 0, borderRadius: '50%', cursor: 'pointer', fontSize: 14, fontWeight: 600,
+                          background: isSelected ? 'var(--accent)' : 'var(--glass)',
+                          color: isSelected ? '#fff' : 'var(--sub)',
+                          border: isSelected ? 'none' : '1px solid var(--border)',
+                          transition: 'all 0.2s ease',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center'
+                        }}
+                      >
+                        {d}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </div>
 
           <div>
@@ -125,7 +216,7 @@ export default function TaskModal({ onClose, onSave, activeTracks, TRACKS }) {
             }} 
             style={{ padding: '10px 20px', borderRadius: 8, background: 'var(--accent)', color: '#fff', border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: 14 }}
           >
-            Create Task
+            {editTask ? 'Save Changes' : 'Create Task'}
           </button>
         </div>
       </motion.div>

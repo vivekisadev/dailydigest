@@ -1,7 +1,10 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { motion } from 'framer-motion';
+import MonthCalendarView from './MonthCalendarView';
 
-export default function GanttCalendar({ allTasks, doneMap, onNodeClick }) {
+export default function GanttCalendar({ allTasks, doneMap, onNodeClick, startDate, onDateClick }) {
+  const [viewMode, setViewMode] = useState('month'); // Default to month view
+
   // Group tasks by Week and Day
   const groupedTasks = {};
   
@@ -32,19 +35,50 @@ export default function GanttCalendar({ allTasks, doneMap, onNodeClick }) {
       {/* Header Bar */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '24px 32px', borderBottom: '1px solid var(--border)' }}>
         <div>
-          <div style={{ fontSize: 12, color: 'var(--sub)', marginBottom: 4 }}>Projects / <span style={{ color: 'var(--text-secondary)' }}>Project Calendar</span></div>
+          <div style={{ fontSize: 12, color: 'var(--sub)', marginBottom: 4 }}>Calendar / <span style={{ color: 'var(--text-secondary)' }}>Timeline</span></div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <h1 style={{ fontSize: 28, fontWeight: 700, margin: 0, letterSpacing: '-0.02em', color: 'var(--text)' }}>Calendar Timeline</h1>
-            <span style={{ fontSize: 10, background: 'var(--glass)', padding: '2px 8px', borderRadius: 12, color: 'var(--sub)' }}>Daily View</span>
+            <h1 style={{ fontSize: 28, fontWeight: 700, margin: 0, letterSpacing: '-0.02em', color: 'var(--text)' }}>Calendar</h1>
+            <div style={{ display: 'flex', background: 'var(--glass)', borderRadius: 8, padding: 4 }}>
+              <button 
+                onClick={() => setViewMode('month')}
+                style={{ 
+                  background: viewMode === 'month' ? 'var(--card-solid)' : 'transparent',
+                  color: viewMode === 'month' ? 'var(--text)' : 'var(--sub)',
+                  border: 'none', padding: '6px 12px', borderRadius: 6, fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                  boxShadow: viewMode === 'month' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none'
+                }}
+              >
+                Month
+              </button>
+              <button 
+                onClick={() => setViewMode('timeline')}
+                style={{ 
+                  background: viewMode === 'timeline' ? 'var(--card-solid)' : 'transparent',
+                  color: viewMode === 'timeline' ? 'var(--text)' : 'var(--sub)',
+                  border: 'none', padding: '6px 12px', borderRadius: 6, fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                  boxShadow: viewMode === 'timeline' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none'
+                }}
+              >
+                Timeline
+              </button>
+            </div>
           </div>
         </div>
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 32px', borderBottom: '1px solid var(--border)' }}>
+      {viewMode === 'month' ? (
+        <MonthCalendarView allTasks={allTasks} startDate={startDate} onNodeClick={onNodeClick} onDateClick={onDateClick} />
+      ) : (
+        <>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 32px', borderBottom: '1px solid var(--border)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 13, color: 'var(--sub)' }}>
           <div style={{ display: 'flex', gap: 4 }}>
-            <button onClick={() => handleScroll(-1)} style={{ background: 'var(--glass)', border: '1px solid var(--border)', color: 'var(--text)', width: 28, height: 28, borderRadius: 14, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>&larr;</button>
-            <button onClick={() => handleScroll(1)} style={{ background: 'var(--glass)', border: '1px solid var(--border)', color: 'var(--text)', width: 28, height: 28, borderRadius: 14, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>&rarr;</button>
+            <button onClick={() => handleScroll(-1)} style={{ background: 'var(--glass)', border: '1px solid var(--border)', color: 'var(--text)', width: 28, height: 28, borderRadius: 14, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+            </button>
+            <button onClick={() => handleScroll(1)} style={{ background: 'var(--glass)', border: '1px solid var(--border)', color: 'var(--text)', width: 28, height: 28, borderRadius: 14, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+            </button>
           </div>
           <span>Roadmap Schedule</span>
         </div>
@@ -83,7 +117,7 @@ export default function GanttCalendar({ allTasks, doneMap, onNodeClick }) {
                       background: 'var(--card)',
                       backdropFilter: 'blur(8px)',
                       border: '1px solid',
-                      borderColor: isDone ? 'rgba(16, 185, 129, 0.2)' : 'rgba(255,255,255,0.05)',
+                      borderColor: isDone ? 'rgba(16, 185, 129, 0.2)' : 'var(--border)',
                       borderRadius: 12,
                       padding: 16,
                       cursor: 'pointer',
@@ -113,6 +147,8 @@ export default function GanttCalendar({ allTasks, doneMap, onNodeClick }) {
           </div>
         ))}
       </div>
-    </div>
-  );
+      </>
+    )}
+  </div>
+);
 }

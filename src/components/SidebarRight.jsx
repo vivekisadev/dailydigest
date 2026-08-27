@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import ActivityFeed from './ActivityFeed';
 
-export default function SidebarRight({ detailTask, closeDetail, activeTracks, TRACKS, done, activeResources, RESOURCES, activeRoadmapTitle, tab, isJoined, activeRaw, activeRoadmapDef, joinRoadmap, leaveRoadmap, toggleTaskDone, isOverlayMode, actualTodayTasks, incompletePastTasks, selectedActivityDate, setSelectedActivityDate, onOpenTaskModal, onOpenMeetingModal, meetings }) {
+export default function SidebarRight({ detailTask, closeDetail, activeTracks, TRACKS, done, activeResources, RESOURCES, activeRoadmapTitle, tab, isJoined, activeRaw, activeRoadmapDef, joinRoadmap, leaveRoadmap, toggleTaskDone, isOverlayMode, actualTodayTasks, incompletePastTasks, selectedActivityDate, setSelectedActivityDate, onOpenTaskModal, onOpenMeetingModal, meetings, onEditCustomTask, onDeleteCustomTask }) {
   const [activeTab, setActiveTab] = useState('Overview');
   const [detailActiveTab, setDetailActiveTab] = useState('comments');
 
@@ -431,18 +431,64 @@ export default function SidebarRight({ detailTask, closeDetail, activeTracks, TR
     );
   }
 
-  const renderTask = (task, isPast) => {
+  const renderTask = (task, isPast, isSelected = false) => {
     const isDone = done && done[task.id];
+    const checkboxColor = '#A78BFA'; // Soft purple for checkbox
+    
     return (
-      <div key={task.id} className="interactable" onClick={() => { if (typeof toggleTaskDone === 'function') toggleTaskDone(task.id); }} style={{ background: 'rgba(255,255,255,0.03)', border: isPast ? '1px solid rgba(239, 68, 68, 0.3)' : '1px solid rgba(255,255,255,0.05)', borderRadius: 8, padding: 12, cursor: 'pointer', transition: 'all 0.2s' }}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
-          <div style={{ width: 16, height: 16, borderRadius: 4, border: `1.5px solid ${isPast ? '#EF4444' : 'var(--accent)'}`, marginTop: 2, background: isDone ? (isPast ? '#EF4444' : 'var(--accent)') : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            {isDone && <svg width="10" height="8" viewBox="0 0 12 10"><path d="M1 5L4.5 8.5L11 1" stroke="#fff" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+      <div 
+        key={task.id} 
+        className="interactable" 
+        onClick={() => { if (typeof toggleTaskDone === 'function') toggleTaskDone(task.id); }} 
+        style={{ 
+          background: 'var(--card)', 
+          border: isSelected ? `1.5px solid ${checkboxColor}` : '1.5px solid var(--border)', 
+          borderRadius: 12, 
+          padding: '12px 14px', 
+          cursor: 'pointer', 
+          transition: 'all 0.2s',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between'
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+          <div style={{ 
+            width: 20, height: 20, borderRadius: 6, 
+            border: isDone ? 'none' : '1.5px solid var(--border)', 
+            background: isDone ? checkboxColor : 'transparent', 
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            flexShrink: 0
+          }}>
+            {isDone && <svg width="10" height="8" viewBox="0 0 12 10"><path d="M1 5L4.5 8.5L11 1" stroke="#fff" strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>}
           </div>
           <div>
-            <div style={{ fontSize: 13, color: isPast ? '#EF4444' : 'var(--text)', fontWeight: 600, marginBottom: 4, textDecoration: isDone ? 'line-through' : 'none', opacity: isDone ? 0.5 : 1 }}>{task.topic}</div>
-            <div style={{ fontSize: 11, color: '#666' }}>Week {task.week} • Day {task.day} {isPast && <span style={{ color: '#EF4444', marginLeft: 4 }}>(Overdue)</span>}</div>
+            <div style={{ fontSize: 14, color: 'var(--text)', fontWeight: 600, marginBottom: 2, textDecoration: isDone ? 'line-through' : 'none', opacity: isDone ? 0.7 : 1 }}>{task.topic}</div>
+            <div style={{ fontSize: 12, color: 'var(--sub)' }}>Week {task.week} • Day {task.day} {isPast && <span style={{ color: '#EF4444', marginLeft: 4 }}>(Overdue)</span>}</div>
           </div>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          {task.isCustom && (
+            <>
+              <div 
+                onClick={(e) => { e.stopPropagation(); if (typeof onEditCustomTask === 'function') onEditCustomTask(task); }} 
+                style={{ color: 'var(--sub)', padding: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+                title="Edit Task"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+              </div>
+              <div 
+                onClick={(e) => { e.stopPropagation(); if (typeof onDeleteCustomTask === 'function') onDeleteCustomTask(task.id); }} 
+                style={{ color: '#EF4444', padding: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+                title="Delete Task"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+              </div>
+            </>
+          )}
+          {!task.isCustom && (
+            <div style={{ color: 'var(--sub)', padding: '0 4px', fontSize: 18, cursor: 'pointer', fontWeight: 800, paddingBottom: 4 }}>⋮</div>
+          )}
         </div>
       </div>
     );
@@ -484,22 +530,26 @@ export default function SidebarRight({ detailTask, closeDetail, activeTracks, TR
         />
       ) : (
         <>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-            <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)' }}>Tasks today</div>
-            <div style={{ display: 'flex', gap: 12 }}>
-              {combinedList.length > 3 && <div onClick={() => setViewAll(true)} style={{ fontSize: 12, color: 'var(--accent)', cursor: 'pointer', fontWeight: 600 }}>View All</div>}
-              <div onClick={onOpenTaskModal} style={{ fontSize: 12, color: 'var(--accent)', cursor: 'pointer', fontWeight: 600 }}>Add</div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+            <div style={{ fontSize: 24, fontWeight: 800, color: 'var(--text)', letterSpacing: '-0.5px' }}>Tasks today</div>
+            <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+              <button onClick={onOpenTaskModal} style={{ cursor: 'pointer', background: 'var(--accent)', color: '#fff', border: 'none', padding: '6px 12px', borderRadius: 6, fontSize: 12, fontWeight: 600 }}>+ Add Task</button>
             </div>
           </div>
-          <div style={{ fontSize: 12, color: 'var(--sub)', marginBottom: 16 }}>{combinedList.length} tasks pending</div>
+          <div style={{ fontSize: 15, color: 'var(--sub)', marginBottom: 16, fontWeight: 500 }}>Pending items</div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {combinedList.length === 0 ? (
                <div style={{ color: 'var(--sub)', fontSize: 13, fontStyle: 'italic' }}>No pending tasks! 🎉</div>
-        ) : (
-           combinedList.slice(0, 3).map(t => renderTask(t, safePast.includes(t)))
-        )}
-      </div>
+            ) : (
+               combinedList.slice(0, 5).map((t, idx) => {
+                 // The image shows the first uncompleted task has a highlighted border
+                 const firstUncompletedIdx = combinedList.findIndex(task => !(done && done[task.id]));
+                 const isSelected = idx === firstUncompletedIdx;
+                 return renderTask(t, safePast.includes(t), isSelected);
+               })
+            )}
+          </div>
 
       <div style={{ marginTop: 40, display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
         <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)' }}>Upcoming meetings</div>
